@@ -24,7 +24,7 @@ class CODIModel(nn.Module):
     def init_tokenizer_and_model(self):
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
         self.tokenizer.add_special_tokens(
-            {"additional_special_tokens": ["<bot>", "<eot>"]}
+            {"additional_special_tokens": [self.config.bot_token, self.config.eot_token]}
         )
         self.tokenizer.pad_token = self.tokenizer.eos_token
         self.llm = AutoModelForCausalLM.from_pretrained(
@@ -34,7 +34,7 @@ class CODIModel(nn.Module):
         if self.config.use_lora:
             lora_config = LoraConfig(**self.config.lora)
             self.llm = get_peft_model(self.llm, lora_config)
-        self.llm = self.llm.to("cuda")
+        self.llm = self.llm.to(self.config.device)
 
     def init_projections(self):
         self.proj = nn.Sequential(
@@ -50,16 +50,14 @@ class CODIModel(nn.Module):
                 dtype=torch.bfloat16,
             ),
             nn.LayerNorm(self.llm.config.hidden_size, dtype=torch.bfloat16),
-        ).to("cuda")
+        ).to(self.config.device)
 
     def get_cot_vectors(self):
-        bot_token_id = self.tokenizer.convert_tokens_to_ids("<bot>")
-        eot_token_id = self.tokenizer.convert_tokens_to_ids("<eot>")
-
         embedding_layer = self.llm.get_input_embeddings()
 
-        self.bot_embedding = embedding_layer.weight[bot_token_id]
+        eot_token_id = self.tokenizer.convert_tokens_to_ids(self.config.eot_token)
         self.eot_embedding = embedding_layer.weight[eot_token_id]
+
 
     def run_cot_loop(
         self, quest_embeds: torch.Tensor
@@ -82,15 +80,11 @@ class CODIModel(nn.Module):
         return past_key_values
 
     def forward(self, inputs: dict[str, torch.Tensor]):
-        question_ids = inputs["question_ids"].to("cuda")
-        answer_ids = inputs["answer_ids"].to("cuda")
+        question_ids = inputs["question_ids"].to(self.config.device)
+        answer_ids = inputs["answer_ids"].to(self.config.device)
         batch_size = question_ids.size(0)
-        expanded_eot_emb = (
-            self.eot_embedding.unsqueeze(0).unsqueeze(0).expand(batch_size, 1, -1)
-        )
         question_embeds = self.llm.get_input_embeddings()(question_ids)
         answer_embed = self.llm.get_input_embeddings()(answer_ids)
-        answer_embed = torch.cat([expanded_eot_emb, answer_embed], dim=1)
 
         past_key_values = self.run_cot_loop(question_embeds)
         answer_result = self.llm(
@@ -123,7 +117,7 @@ class CODIModel(nn.Module):
             Generated answer token IDs
         """
 
-        question_ids = question_ids.to(self.llm.device)
+        question_ids = question_ids.to(self.config.device)
         batch_size = question_ids.size(0)
 
         question_embeds = self.llm.get_input_embeddings()(question_ids)
