@@ -188,6 +188,8 @@ class CODIModel(nn.Module):
         # Concatenate all tokens
         answer_ids = torch.cat(generated_token_ids, dim=1)
 
+        return answer_ids
+
 
 if __name__ == "__main__":
     model = CODIModel()
