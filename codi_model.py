@@ -52,13 +52,10 @@ class CODIModel(nn.Module):
             nn.LayerNorm(self.llm.config.hidden_size, dtype=torch.bfloat16),
         ).to("cuda")
 
-    def get_cot_vectors(self):
-        bot_token_id = self.tokenizer.convert_tokens_to_ids("<bot>")
+    def get_eot_vectors(self):
+
         eot_token_id = self.tokenizer.convert_tokens_to_ids("<eot>")
-
         embedding_layer = self.llm.get_input_embeddings()
-
-        self.bot_embedding = embedding_layer.weight[bot_token_id]
         self.eot_embedding = embedding_layer.weight[eot_token_id]
 
     def run_cot_loop(
@@ -84,13 +81,8 @@ class CODIModel(nn.Module):
     def forward(self, inputs: dict[str, torch.Tensor]):
         question_ids = inputs["question_ids"].to("cuda")
         answer_ids = inputs["answer_ids"].to("cuda")
-        batch_size = question_ids.size(0)
-        expanded_eot_emb = (
-            self.eot_embedding.unsqueeze(0).unsqueeze(0).expand(batch_size, 1, -1)
-        )
         question_embeds = self.llm.get_input_embeddings()(question_ids)
         answer_embed = self.llm.get_input_embeddings()(answer_ids)
-        answer_embed = torch.cat([expanded_eot_emb, answer_embed], dim=1)
 
         past_key_values = self.run_cot_loop(question_embeds)
         answer_result = self.llm(
