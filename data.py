@@ -131,16 +131,12 @@ def collate_fn(batch, tokenizer, max_seq_length):
         "processed_cot": [item['processed_cot'] for item in batch]
     }
 
-
-if __name__ == "__main__":
-    with open("configs/config.yaml", 'r') as f:
-        config = Config(yaml.safe_load(f))
+def get_dataset(config):
 
     tokenizer = AutoTokenizer.from_pretrained(config.TOKENIZER_NAME)
     tokenizer.pad_token = tokenizer.eos_token
     # TODO: do I want this or Timur? Maybe use preregistered tokens?
     tokenizer.add_special_tokens({'additional_special_tokens': [config.EOT_TOKEN, config.BOT_TOKEN]})
-    # model.resize_token_embeddings(len(tokenizer)) # This would be done if we have a model
 
     dataset = GSM8kDataset(
         tokenizer=tokenizer,
@@ -151,13 +147,30 @@ if __name__ == "__main__":
         num_samples=config.NUM_SAMPLES_TEST
     )
 
+    return dataset
+
+def get_dataloader(config):
+
+    dataset = get_dataset(config)
+
     dataloader = DataLoader(
         dataset,
         batch_size=config.BATCH_SIZE,
         shuffle=True, # TODO: change to True for training
         num_workers=config.NUM_WORKERS,
-        collate_fn=lambda batch_arg: collate_fn(batch_arg, tokenizer, config.MAX_SEQ_LENGTH)  ### TODO: this is a lambda function, I can change it if needed
+        collate_fn=lambda batch_arg: collate_fn(batch_arg, dataset.tokenizer, config.MAX_SEQ_LENGTH)  ### TODO: this is a lambda function, I can change it if needed
     )
+
+    return dataloader
+
+
+
+if __name__ == "__main__":
+    with open("configs/config.yaml", 'r') as f:
+        config = Config(yaml.safe_load(f))
+
+    dataloader = get_dataloader(config)
+    tokenizer = dataloader.dataset.tokenizer
 
     print(f"Tokenizer vocabulary size: {len(tokenizer)}")
     print(f"EOT token: '{config.EOT_TOKEN}', ID: {tokenizer.convert_tokens_to_ids(config.EOT_TOKEN)}")
