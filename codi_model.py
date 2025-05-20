@@ -24,7 +24,7 @@ class CODIModel(nn.Module):
     def init_tokenizer_and_model(self):
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
         self.tokenizer.add_special_tokens(
-            {"additional_special_tokens": ["<bot>", "<eot>"]}
+            {"additional_special_tokens": [self.config.bot_token, self.config.eot_token]}
         )
         self.tokenizer.pad_token = self.tokenizer.eos_token
         self.llm = AutoModelForCausalLM.from_pretrained(
@@ -54,7 +54,7 @@ class CODIModel(nn.Module):
 
     def get_eot_vector(self):
 
-        eot_token_id = self.tokenizer.convert_tokens_to_ids("<eot>")
+        eot_token_id = self.tokenizer.convert_tokens_to_ids(self.config.eot_token)
         embedding_layer = self.llm.get_input_embeddings()
         self.eot_embedding = embedding_layer.weight[eot_token_id]
 
