@@ -1,0 +1,22 @@
+DATASET_NAME: "zen-E/GSM8k-Aug"
+DATASET_SPLIT_TRAIN: "train"
+DATASET_SPLIT_TEST: "test"
+NUM_SAMPLES_TRAIN: null
+NUM_SAMPLES_TEST: 50
+
+# Special tokens
+BOT_TOKEN: "<bot>"
+EOT_TOKEN: "<eot>"
+
+# Tokenizer settings
+TOKENIZER_NAME: "gpt2"
+MAX_SEQ_LENGTH: 512
+
+# DataLoader settings
+BATCH_SIZE: 2 # Reduced for demo
+SHUFFLE_DATALOADER: true
+NUM_WORKERS: 0 # Reduced for demo
+
+# Demonstration settings
+NUM_BATCHES_TO_SHOW: 10 # Reduced for demo
+NUM_SAMPLES_FROM_DATASET_TO_SHOW: 10
