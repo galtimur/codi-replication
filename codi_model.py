@@ -19,7 +19,7 @@ class CODIModel(nn.Module):
 
         self.init_tokenizer_and_model()
         self.init_projections()
-        self.get_cot_vectors()
+        self.get_eot_vector()
 
     def init_tokenizer_and_model(self):
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
@@ -52,7 +52,7 @@ class CODIModel(nn.Module):
             nn.LayerNorm(self.llm.config.hidden_size, dtype=torch.bfloat16),
         ).to("cuda")
 
-    def get_eot_vectors(self):
+    def get_eot_vector(self):
 
         eot_token_id = self.tokenizer.convert_tokens_to_ids("<eot>")
         embedding_layer = self.llm.get_input_embeddings()
