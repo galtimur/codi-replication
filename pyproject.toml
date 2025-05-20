@@ -1,6 +1,10 @@
-[project]
+[tool.poetry]
 name = "codi-replication"
 version = "0.1.0"
+package-mode = false
+description = ""
+authors = [""]
+readme = "README.md"
 
 [tool.poetry.dependencies]
 python = ">=3.9,<4.0"
@@ -11,3 +15,7 @@ transformers = "^4.51.3"
 omegaconf = "^2.3.0"
 mypy = "^1.15.0"
 datasets = "^3.6.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
