@@ -175,15 +175,16 @@ class CODIModel(nn.Module):
             # Add to generated tokens
             generated_token_ids.append(next_token)
 
+            # Check for EOS token
+            if (next_token == self.tokenizer.eos_token_id):
+                break
+
             # Update past key values for efficiency
             past_key_values = outputs.past_key_values
 
             # Get embedding for the next token
             current_embed = self.llm.get_input_embeddings()(next_token)
 
-            # Check for EOS token if needed
-            # if (next_token == eos_token_id).any():
-            #     # Handle early stopping logic if needed
 
         # Concatenate all tokens
         answer_ids = torch.cat(generated_token_ids, dim=1)
