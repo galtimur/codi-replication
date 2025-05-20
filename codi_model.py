@@ -60,49 +60,50 @@ class CODIModel(nn.Module):
         self.bot_embedding = embedding_layer.weight[bot_token_id]
         self.eot_embedding = embedding_layer.weight[eot_token_id]
 
-    def run_cot_loop(self, input_embeds: torch.Tensor) -> torch.Tensor:
+    def run_cot_loop(
+        self, quest_embeds: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         past_key_values = None
         for i in range(self.cot_length):
             # No causal masking, as the model is already causal
             student_outputs = self.llm(
-                inputs_embeds=input_embeds,
+                inputs_embeds=quest_embeds,
                 output_hidden_states=True,
                 past_key_values=past_key_values,
             )
             last_output_vectors = self.proj(
                 student_outputs.hidden_states[-1][:, -1].unsqueeze(dim=1)
             )
-            input_embeds = torch.cat([input_embeds, last_output_vectors], dim=1)
+            quest_embeds = last_output_vectors
             past_key_values = student_outputs.past_key_values
 
-        del last_output_vectors, past_key_values, student_outputs
-        return input_embeds
+        del last_output_vectors, student_outputs, quest_embeds
+        return past_key_values
 
-    def think(self, inputs: dict[str, torch.Tensor]) -> torch.Tensor:
-        """
-        Takes question, returns inputs_embeds of question + <bot> + <CoT> + <eot>
-        """
-        input_ids = inputs["question_ids"].to("cuda")
+    def forward(self, inputs: dict[str, torch.Tensor]):
+        question_ids = inputs["question_ids"].to("cuda")
+        answer_ids = inputs["answer_ids"].to("cuda")
+        batch_size = question_ids.size(0)
         expanded_eot_emb = (
-            self.eot_embedding.unsqueeze(0)
-            .unsqueeze(0)
-            .expand(input_ids.size(0), 1, -1)
+            self.eot_embedding.unsqueeze(0).unsqueeze(0).expand(batch_size, 1, -1)
         )
-        expanded_bot_emb = (
-            self.bot_embedding.unsqueeze(0)
-            .unsqueeze(0)
-            .expand(input_ids.size(0), 1, -1)
-        )
-        # TODO would be here <bot>?
-        input_embeds = self.llm.get_input_embeddings()(input_ids)
-        input_embeds = torch.cat([input_embeds, expanded_bot_emb], dim=1)
-        input_embeds = self.run_cot_loop(input_embeds)
-        input_embeds = torch.cat([input_embeds, expanded_eot_emb], dim=1)
+        question_embeds = self.llm.get_input_embeddings()(question_ids)
+        answer_embed = self.llm.get_input_embeddings()(answer_ids)
+        answer_embed = torch.cat([expanded_eot_emb, answer_embed], dim=1)
 
-        return input_embeds
+        past_key_values = self.run_cot_loop(question_embeds)
+        full_embeds = self.llm(
+            inputs_embeds=answer_embed, past_key_values=past_key_values
+        )
+
+        return full_embeds
 
 
 if __name__ == "__main__":
     model = CODIModel()
-    inputs = {"question_ids": torch.tensor(2 * [[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]])}
-    pre_inputs = model.think(inputs)
+    inputs = {
+        "question_ids": torch.tensor(2 * [[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]]),
+        "answer_ids": torch.tensor(2 * [[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]]),
+    }
+    pre_inputs = model.forward(inputs)
+    pass
