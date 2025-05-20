@@ -2,7 +2,7 @@ import torch
 from omegaconf import OmegaConf
 from transformers import AutoTokenizer
 from codi_model import CODIModel
-from data import GSM8kDataset, collate_fn, Config
+from data import get_dataset, get_dataloader, Config
 from torch.utils.data import DataLoader
 
 
@@ -19,23 +19,8 @@ def main():
     # Initialize model
     model = CODIModel(config_path=config_path)
 
-    # Initialize dataset and dataloader
-    dataset = GSM8kDataset(
-        tokenizer=tokenizer,
-        dataset_name=data_config.DATASET_NAME,
-        eot_token=config.model.eot_token,
-        bot_token=config.model.bot_token,
-        split=data_config.DATASET_SPLIT_TRAIN,    # Using train split for training
-        num_samples=data_config.NUM_SAMPLES_TRAIN 
-    )
-
-    dataloader = DataLoader(
-        dataset,
-        batch_size=data_config.BATCH_SIZE,
-        shuffle=data_config.SHUFFLE_DATALOADER,
-        num_workers=data_config.NUM_WORKERS,
-        collate_fn=lambda batch_arg: collate_fn(batch_arg, tokenizer, data_config.MAX_SEQ_LENGTH)
-    )
+    # Get dataloader using helper functions (gets dataset inside)
+    dataloader = get_dataloader(data_config)
 
     batch = next(iter(dataloader))
 
