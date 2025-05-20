@@ -168,7 +168,7 @@ class CODIModel(nn.Module):
             generated_token_ids.append(next_token)
 
             # Check for EOS token
-            if (next_token == self.tokenizer.eos_token_id):
+            if (next_token == self.tokenizer.eos_token_id).any():
                 break
 
             # Update past key values for efficiency
