@@ -46,8 +46,8 @@ class GSM8kDataset(Dataset):
         # 1) bos+question+bot
         question_str = f"{self.tokenizer.bos_token}{question_text}{self.bot_token}"
         
-        # 2) TheAnswerIs:{answer}+eos
-        answer_str = f"The answer is:{answer_text}{self.tokenizer.eos_token}"
+        # 2) eot+TheAnswerIs:{answer}+eos
+        answer_str = f"{self.eot_token}The answer is:{answer_text}{self.tokenizer.eos_token}"
         
         # 3) bos+question+cot+TheAnswerIs:{answer}+eos
         teacher_full_str = f"{self.tokenizer.bos_token}{question_text}{processed_cot}The answer is:{answer_text}{self.tokenizer.eos_token}"
@@ -135,14 +135,12 @@ def get_dataset(config):
 
     tokenizer = AutoTokenizer.from_pretrained(config.TOKENIZER_NAME)
     tokenizer.pad_token = tokenizer.eos_token
-    # TODO: do I want this or Timur? Maybe use preregistered tokens?
-    tokenizer.add_special_tokens({'additional_special_tokens': [config.EOT_TOKEN, config.BOT_TOKEN]})
 
     dataset = GSM8kDataset(
         tokenizer=tokenizer,
         dataset_name=config.DATASET_NAME,
-        eot_token=config.EOT_TOKEN,
-        bot_token=config.BOT_TOKEN,
+        eot_token=config.eot_token,
+        bot_token=config.bot_token,
         split=config.DATASET_SPLIT_TEST,
         num_samples=config.NUM_SAMPLES_TEST
     )
@@ -173,8 +171,6 @@ if __name__ == "__main__":
     tokenizer = dataloader.dataset.tokenizer
 
     print(f"Tokenizer vocabulary size: {len(tokenizer)}")
-    print(f"EOT token: '{config.EOT_TOKEN}', ID: {tokenizer.convert_tokens_to_ids(config.EOT_TOKEN)}")
-    print(f"BOT token: '{config.BOT_TOKEN}', ID: {tokenizer.convert_tokens_to_ids(config.BOT_TOKEN)}")
     print(f"PAD token: '{tokenizer.pad_token}', ID: {tokenizer.pad_token_id}")
     print(f"BOS token: '{tokenizer.bos_token}', ID: {tokenizer.bos_token_id}")
     print(f"EOS token: '{tokenizer.eos_token}', ID: {tokenizer.eos_token_id}")
