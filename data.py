@@ -139,8 +139,8 @@ def get_dataset(config):
     dataset = GSM8kDataset(
         tokenizer=tokenizer,
         dataset_name=config.DATASET_NAME,
-        eot_token=config.eot_token,
-        bot_token=config.bot_token,
+        eot_token=config.model.eot_token,
+        bot_token=config.model.bot_token,
         split=config.DATASET_SPLIT_TEST,
         num_samples=config.NUM_SAMPLES_TEST
     )
