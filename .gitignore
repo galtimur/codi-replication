@@ -2,3 +2,4 @@
 __pycache__*
 codi_train_template.py
 wandb*
+checkpoints*

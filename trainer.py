@@ -3,10 +3,12 @@ File is taken from kotlin-initiative repo
 """
 
 import math
+import os
 import time
 import traceback
 import warnings
 from functools import partial
+from pathlib import Path
 from typing import Annotated, Any, Iterable
 
 import pandas as pd
@@ -58,7 +60,7 @@ class PytorchTrainer:
     def __init__(
         self,
         config: DictConfig,
-        model,
+        model: nn.Module,
         train_dataloader: DataLoader,
         val_dataloaders: DataLoader,
         local_rank: int = 0,
@@ -110,7 +112,6 @@ class PytorchTrainer:
 
         self.config = config
 
-        self.checkpoint_steps: list[int] = []
         self.val_steps: list[int] = []
         self.setup_validation_and_checkpoint_schedule()
 
@@ -134,6 +135,9 @@ class PytorchTrainer:
         self.throughput_history = []
         self.throughput_window_size = 20  # For moving average calculation
 
+        if self.config.resume_from is not None and self.config.resume_from != "":
+            self.load_checkpoint(self.config.resume_from)
+
         if perform_sanity_check:
             self.sanity_check()
             self._barrier()
@@ -142,38 +146,54 @@ class PytorchTrainer:
         self, config: DictConfig, total_steps: int, warmup_steps: int
     ):
         self.optimizer = torch.optim.AdamW(
-            self.model.llm.parameters(),
+            self.model.parameters(),         # this is changed from model.llm, be careful?
             **config.optimizer,
         )
         self.scheduler = get_cosine_schedule_with_warmup(
             self.optimizer, warmup_steps, total_steps
         )
 
-    def save_checkpoint(self, batches_done: int, batches_to_save: int = 1000):
-        # TODO still not implemented
-        """
-        Saving checkpoint
-        """
+    def save_checkpoint(self, batches_done: int):
         if self.is_main_process:
-            checkpoint_dict = {
-                "model": self.model.state_dict(),
-                "optimizer": self.optimizer.state_dict(),
-                "scheduler": self.scheduler.state_dict(),
-                "batches_done": batches_done,
-                "config": self.config,
-            }
-            if batches_done % batches_to_save == 0:
-                pass
+            if batches_done % self.config.save_checkpoints_every == 0:
+                time_start = time.time()
+
+                checkpoint_dir = Path(self.config.save_checkpoints_dir)
+                checkpoint_dir.mkdir(parents=True, exist_ok=True)
+                
+                checkpoint_path = checkpoint_dir / f"checkpoint_{batches_done}.pt"
+                
+                checkpoint_dict = {
+                    "model_state_dict": self.model.state_dict(),
+                    "optimizer_state_dict": self.optimizer.state_dict(),
+                    "scheduler_state_dict": self.scheduler.state_dict() if self.scheduler else None,
+                    "batches_done": batches_done,
+                    "micro_batches_done": self.micro_batches_done,
+                    "total_tokens": self.total_tokens,
+                    "throughput_history": self.throughput_history,
+                    "total_training_time": self.total_training_time
+                }
+                
+                torch.save(checkpoint_dict, checkpoint_path)
+                print(f"Checkpoint saved in {time.time() - time_start} s.")
+
+            
+
+    def load_checkpoint(self, checkpoint_path: str):
+        checkpoint = torch.load(checkpoint_path, map_location=self._device)
+        
+        self.model.load_state_dict(checkpoint["model_state_dict"])
+        self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        if self.scheduler and checkpoint["scheduler_state_dict"]:
+            self.scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
+            
+        self.batches_done = checkpoint["batches_done"]
+        self.micro_batches_done = checkpoint["micro_batches_done"]
+        self.total_tokens = checkpoint["total_tokens"]
+        self.throughput_history = checkpoint["throughput_history"]
+        self.total_training_time = checkpoint["total_training_time"]
 
     def setup_validation_and_checkpoint_schedule(self):
-        self.checkpoint_steps = list(
-            range(
-                1,
-                (len(self.train_dataloader) * self.config.num_epochs)
-                // self.accum_steps,
-                self.config.save_checkpoints_every,
-            )
-        )
         self.val_steps = list(
             range(
                 1,
@@ -184,14 +204,10 @@ class PytorchTrainer:
         )
         # No need to save and validate the model at the first step.
         # Val is performed at the start of the training and end of each epoch
-        self.checkpoint_steps = self.checkpoint_steps[1:]
         self.val_steps = self.val_steps[1:]
 
         print(
             f"Validation every: {self.config.validate_every} optimizer step, in total: {len(self.val_steps)} validations"
-        )
-        print(
-            f"Saving checkpoints every: {self.config.save_checkpoints_every} optimizer step, in total: {len(self.checkpoint_steps)} saves"
         )
 
     def sanity_check(self):
@@ -312,12 +328,8 @@ class PytorchTrainer:
                 to_log |= self.validation()
                 self.val_steps.remove(self.batches_done)
 
-            if self.batches_done in self.checkpoint_steps:
-                time_start = time.time()
-                # TODO https://youtrack.jetbrains.com/issue/JBRes-1720/Asynchronous-checkpointing
-                self.save_checkpoint(self.batches_done)
-                self.checkpoint_steps.remove(self.batches_done)
-                print(f"Checkpoint saved in {time.time() - time_start} s.")
+            # inside is decided to save the checkpoint or not
+            self.save_checkpoint(self.batches_done)            
 
             if to_log:
                 wandb.log(to_log, step=self.batches_done)
