@@ -37,8 +37,7 @@ def train(config: DictConfig) -> None:
     setup_seed()
 
     # Initialize dataloader and model
-    train_dataloader = get_dataloader(config)
-    val_dataloaders = get_dataloader(config)
+    train_dataloader, val_dataloader = get_dataloader(config)
     model = BaseModel(config=config)
 
     # Initialize trainer
@@ -46,7 +45,7 @@ def train(config: DictConfig) -> None:
         config.train,
         model,
         train_dataloader,
-        val_dataloaders,
+        val_dataloader,
         perform_sanity_check=True,
     )
 

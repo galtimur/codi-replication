@@ -19,12 +19,9 @@ class GSM8kDataset(Dataset):
         eot_token,
         bot_token,
         split="train",
-        num_samples=None,
     ):
         self.tokenizer = tokenizer
         self.hf_dataset = load_dataset(dataset_name, split=split)
-        if num_samples is not None and num_samples < len(self.hf_dataset):
-            self.hf_dataset = self.hf_dataset.select(range(num_samples))
         self.eot_token = eot_token
         self.bot_token = bot_token
 
@@ -151,51 +148,66 @@ def collate_fn(batch, tokenizer, max_seq_length):
     }
 
 
-def get_dataset(config):
-    tokenizer = AutoTokenizer.from_pretrained(config.TOKENIZER_NAME)
+def get_datasets(config):
+    tokenizer = AutoTokenizer.from_pretrained(config.model.model_name_or_path)
     tokenizer.pad_token = tokenizer.eos_token
 
-    dataset = GSM8kDataset(
+    train_dataset = GSM8kDataset(
         tokenizer=tokenizer,
-        dataset_name=config.DATASET_NAME,
+        dataset_name=config.dataset.name,
         eot_token=config.model.eot_token,
         bot_token=config.model.bot_token,
-        split=config.DATASET_SPLIT_TEST,
-        num_samples=config.NUM_SAMPLES_TEST,
+        split=config.dataset.split_train,
+    )
+    test_dataset = GSM8kDataset(
+        tokenizer=tokenizer,
+        dataset_name=config.dataset.name,
+        eot_token=config.model.eot_token,
+        bot_token=config.model.bot_token,
+        split=config.dataset.split_test,
     )
 
-    return dataset
+    return train_dataset, test_dataset
 
 
 def get_dataloader(config):
-    dataset = get_dataset(config)
+    train_dataset, test_dataset = get_datasets(config)
 
-    dataloader = DataLoader(
-        dataset,
-        batch_size=config.BATCH_SIZE,
-        shuffle=True,  # TODO: change to True for training
-        num_workers=config.NUM_WORKERS,
+    train_dataloader = DataLoader(
+        train_dataset,
+        batch_size=config.dataloader.batch_size,
+        shuffle=config.dataloader.train_shuffle,
+        num_workers=config.dataloader.num_workers,
         collate_fn=lambda batch_arg: collate_fn(
-            batch_arg, dataset.tokenizer, config.MAX_SEQ_LENGTH
+            batch_arg, train_dataset.tokenizer, config.model.max_length
         ),  ### TODO: this is a lambda function, I can change it if needed
     )
 
-    return dataloader
+    test_dataloader = DataLoader(
+        test_dataset,
+        batch_size=config.dataloader.batch_size,
+        shuffle=config.dataloader.test_shuffle,
+        num_workers=config.dataloader.num_workers,
+        collate_fn=lambda batch_arg: collate_fn(
+            batch_arg, test_dataset.tokenizer, config.model.max_length
+        ),
+    )
+    return train_dataloader, test_dataloader
 
 
 if __name__ == "__main__":
     with open("configs/config.yaml", "r") as f:
         config = Config(yaml.safe_load(f))
 
-    dataloader = get_dataloader(config)
-    tokenizer = dataloader.dataset.tokenizer
+    train_dataloader, test_dataloader = get_dataloader(config)
+    tokenizer = train_dataloader.dataset.tokenizer
 
     print(f"Tokenizer vocabulary size: {len(tokenizer)}")
     print(f"PAD token: '{tokenizer.pad_token}', ID: {tokenizer.pad_token_id}")
     print(f"BOS token: '{tokenizer.bos_token}', ID: {tokenizer.bos_token_id}")
     print(f"EOS token: '{tokenizer.eos_token}', ID: {tokenizer.eos_token_id}")
 
-    for i, batch_data in enumerate(dataloader):
+    for i, batch_data in enumerate(test_dataloader):
         if i >= config.NUM_BATCHES_TO_SHOW:
             break
         print(f"\nBatch {i+1}:")

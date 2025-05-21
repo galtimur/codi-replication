@@ -15,16 +15,16 @@ def main():
     )  # GSM8kDataset and DataLoader expect a dot-accessible config for data part
 
     # Initialize tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(data_config.TOKENIZER_NAME)
+    tokenizer = AutoTokenizer.from_pretrained(data_config.model.model_name_or_path)
     tokenizer.pad_token = tokenizer.eos_token
 
     # Initialize model
     model = CODIModel(config_path=config_path)
 
     # Get dataloader using helper functions (gets dataset inside)
-    dataloader = get_dataloader(data_config)
+    train_dataloader, val_dataloader = get_dataloader(data_config)
 
-    batch = next(iter(dataloader))
+    batch = next(iter(train_dataloader))
 
     # Prepare inputs for the model
     # The CODIModel.forward expects a dictionary with 'question_ids' and 'answer_ids'
