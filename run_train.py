@@ -38,7 +38,13 @@ def train(config: DictConfig) -> None:
 
     # Initialize dataloader and model
     train_dataloader, val_dataloaders = get_dataloader(config)
-    model = BaseModel(config=config)
+    if config.model.model_type == "base":
+        model = BaseModel(config=config)
+    elif config.model.model_type == "codi":
+        model = CODIModel(config=config)
+    else:
+        raise ValueError("Invalid model type")
+    print("Training {config.model.model_type} model")
 
     # Initialize trainer
     trainer = PytorchTrainer(
@@ -47,6 +53,7 @@ def train(config: DictConfig) -> None:
         train_dataloader,
         val_dataloaders,
         perform_sanity_check=True,
+        model_type=config.model.model_type,
     )
 
     trainer.run_training()

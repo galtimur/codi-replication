@@ -62,6 +62,7 @@ class PytorchTrainer:
         model: nn.Module,
         train_dataloader: DataLoader,
         val_dataloaders: DataLoader,
+        model_type: str,
         local_rank: int = 0,
         global_rank: int = 0,
         world_size: int = 1,
@@ -78,6 +79,7 @@ class PytorchTrainer:
         self.val_dataloaders = val_dataloaders
         self._device = model.device
         self.model = model
+        self.model_type = model_type
 
         micro_batch_size = self.train_dataloader.batch_size
         if micro_batch_size is None:
@@ -116,7 +118,10 @@ class PytorchTrainer:
 
         self.batches_done = 0
         self.micro_batches_done = 0
-        self.loss_acc = torch.tensor(0.0, device=self._device)
+        self.loss_tot = torch.tensor(0.0, device=self._device)
+        self.loss_teach = torch.tensor(0.0, device=self._device)
+        self.loss_stud = torch.tensor(0.0, device=self._device)
+        self.loss_distil = torch.tensor(0.0, device=self._device)
         self.num_tokens = torch.tensor(0, device=self._device)
         self.total_tokens = 0
 
@@ -270,8 +275,8 @@ class PytorchTrainer:
                 # pure inference_mode is incompatible with FSDP, so I use no_grad()
                 with torch.no_grad():
                     outputs = self.model(batch)
-                val_loss_acc += outputs["loss"]
-                val_num_tokens += outputs["num_tokens"]
+                val_loss_acc += outputs.loss
+                val_num_tokens += outputs.num_tokens
 
                 # Calculate exact match for every sample in batch
                 decoded_texts = [
@@ -385,14 +390,18 @@ class PytorchTrainer:
             self.step_start_time = time.time()
 
         self.batch_to_device(micro_batch)
-        forward_dict = self.model(micro_batch)
-        loss = forward_dict["loss"]
+        forward_out = self.model(micro_batch)
+        loss = forward_out["loss"]
         loss.backward()
 
         # Note that number of micro_batches_done is counted on each device
         self.micro_batches_done += 1
-        self.loss_acc += loss
-        self.num_tokens += forward_dict["num_tokens"]
+        self.loss_tot += loss
+        if self.model_type == "codi":
+            self.loss_teach += forward_out.teacher_loss
+            self.loss_stud += forward_out.teacher_loss
+            self.loss_distil += forward_out.distill_loss
+        self.num_tokens += forward_out.num_tokens
 
     def optimization_step(self) -> Annotated[dict, "to_log"]:
         to_log = {}
@@ -404,7 +413,10 @@ class PytorchTrainer:
 
         # Summarizes values across all devices
         if self.is_distributed:
-            dist.all_reduce(self.loss_acc, op=dist.ReduceOp.SUM)
+            dist.all_reduce(self.loss_tot, op=dist.ReduceOp.SUM)
+            dist.all_reduce(self.loss_teach, op=dist.ReduceOp.SUM)
+            dist.all_reduce(self.loss_stud, op=dist.ReduceOp.SUM)
+            dist.all_reduce(self.loss_distil, op=dist.ReduceOp.SUM)
             dist.all_reduce(self.num_tokens, op=dist.ReduceOp.SUM)
 
         # Calculate throughput (tokens/second)
@@ -438,8 +450,17 @@ class PytorchTrainer:
         if self.scheduler is not None:
             self.scheduler.step()
 
-        loss_to_log = self.loss_acc / self.accum_steps
-        to_log["train/loss_batch"] = loss_to_log.item()
+        loss_to_log_tot = self.loss_tot / self.accum_steps
+        to_log["train/loss_total"] = loss_to_log_tot.item()
+
+        if self.model_type == "codi":
+            loss_to_log_teach = self.loss_teach / self.accum_steps
+            loss_to_log_stud = self.loss_stud / self.accum_steps
+            loss_to_log_distil = self.loss_distil / self.accum_steps
+
+            to_log["train/loss_teach"] = loss_to_log_teach.item()
+            to_log["train/loss_stud"] = loss_to_log_stud.item()
+            to_log["train/loss_distil"] = loss_to_log_distil.item()
         to_log["lr"] = lr
         self.total_tokens += int(self.num_tokens.item())
         to_log["tokens"] = self.total_tokens
@@ -469,7 +490,10 @@ class PytorchTrainer:
             )
 
         self.batches_done += 1
-        self.loss_acc.zero_()
+        self.loss_tot.zero_()
+        self.loss_teach.zero_()
+        self.loss_stud.zero_()
+        self.loss_distil.zero_()
         self.num_tokens.zero_()
 
         # Reset timer for next step

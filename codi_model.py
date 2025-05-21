@@ -7,6 +7,7 @@ from omegaconf import DictConfig, OmegaConf
 from peft import LoraConfig, get_peft_model
 from torch.nn.functional import smooth_l1_loss
 from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers.modeling_outputs import CausalLMOutputWithCrossAttentions
 
 
 class BaseModel(nn.Module):
@@ -165,7 +166,7 @@ class CODIModel(nn.Module):
         batch_indices = torch.arange(student_outputs.logits.size(0), device=self.device)
         actual_positions_stud = student_outputs.logits.size(1) - semicolon_pos
         actual_positions_teach = teacher_outputs.logits.size(1) - semicolon_pos
-        distill_loss = torch.Tensor([0.0]).to(self.device)
+        distill_loss = torch.tensor(0.0).to(self.device)
         for layer_stud, layer_teach in zip(
             student_outputs.hidden_states, teacher_outputs.hidden_states
         ):
@@ -224,14 +225,21 @@ class CODIModel(nn.Module):
             + self.gamma * distill_loss
         )
 
-        return {
-            "loss": total_loss,
-            "num_tokens": student_outputs["num_tokens"],
-            "teacher_loss": teacher_outputs.loss,
-            "student_loss": student_outputs.loss,
-            "distill_loss": distill_loss,
-            "logits": student_outputs.logits,
-        }
+        output = CausalLMOutputWithCrossAttentions(
+            loss=total_loss,
+            logits=student_outputs.logits,
+            # Set other required parameters to None
+            past_key_values=None,
+            hidden_states=None,
+            attentions=None,
+            cross_attentions=None
+        )
+        output.num_tokens = student_outputs["num_tokens"]
+        output.teacher_loss = teacher_outputs.loss
+        output.student_loss = student_outputs.loss
+        output.distill_loss = distill_loss
+
+        return output
 
     def generate(
         self,
