@@ -30,10 +30,11 @@ def train(config: DictConfig) -> None:
     wandb.login(key=os.environ["WANDB_KEY"], host=os.environ["WANDB_HOST"])
     wandb.init(
         project="codi",
-        name=os.environ["WANDB_NAME"],
+        name=config.model.model_type+"-"+os.environ["WANDB_NAME"],
         # mode="disabled",
     )
-    # wandb.config.update(config)
+    config_dict = OmegaConf.to_container(config, resolve=True)
+    wandb.config.update(config_dict)
     setup_seed()
 
     # Initialize dataloader and model
