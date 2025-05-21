@@ -154,17 +154,17 @@ def get_datasets(config):
 
     train_dataset = GSM8kDataset(
         tokenizer=tokenizer,
-        dataset_name=config.dataset.name,
+        dataset_name=config.data.dataset.name,
         eot_token=config.model.eot_token,
         bot_token=config.model.bot_token,
-        split=config.dataset.split_train,
+        split=config.data.dataset.split_train,
     )
     test_dataset = GSM8kDataset(
         tokenizer=tokenizer,
-        dataset_name=config.dataset.name,
+        dataset_name=config.data.dataset.name,
         eot_token=config.model.eot_token,
         bot_token=config.model.bot_token,
-        split=config.dataset.split_test,
+        split=config.data.dataset.split_test,
     )
 
     return train_dataset, test_dataset
@@ -175,9 +175,9 @@ def get_dataloader(config):
 
     train_dataloader = DataLoader(
         train_dataset,
-        batch_size=config.dataloader.batch_size,
-        shuffle=config.dataloader.train_shuffle,
-        num_workers=config.dataloader.num_workers,
+        batch_size=config.data.dataloader.batch_size,
+        shuffle=config.data.dataloader.train_shuffle,
+        num_workers=config.data.dataloader.num_workers,
         collate_fn=lambda batch_arg: collate_fn(
             batch_arg, train_dataset.tokenizer, config.model.max_length
         ),  ### TODO: this is a lambda function, I can change it if needed
@@ -185,9 +185,9 @@ def get_dataloader(config):
 
     test_dataloader = DataLoader(
         test_dataset,
-        batch_size=config.dataloader.batch_size,
-        shuffle=config.dataloader.test_shuffle,
-        num_workers=config.dataloader.num_workers,
+        batch_size=config.data.dataloader.batch_size,
+        shuffle=config.data.dataloader.test_shuffle,
+        num_workers=config.data.dataloader.num_workers,
         collate_fn=lambda batch_arg: collate_fn(
             batch_arg, test_dataset.tokenizer, config.model.max_length
         ),
