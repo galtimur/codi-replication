@@ -1,7 +1,6 @@
 model:
-  # model_name_or_path: "EleutherAI/gpt-neo-125m"
   model_type: codi # "codi" or "base"
-  model_name_or_path: "openai-community/gpt2"
+  model_name_or_path: "EleutherAI/gpt-neo-125m"
   cot_length: 6
   max_length: 256
   use_lora: false
