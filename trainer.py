@@ -300,7 +300,7 @@ class PytorchTrainer:
                     }, step=self.batches_done)
 
 
-            val_loss_mean = val_loss_acc / val_num_tokens
+            val_loss_mean = val_loss_acc
             exact_match_rate = match_count / total_count if total_count > 0 else 0.0
 
             to_log[f"val/val_loss_mean"] = val_loss_mean.item()
