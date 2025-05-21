@@ -60,7 +60,7 @@ class PytorchTrainer:
         config: DictConfig,
         model,
         train_dataloader: DataLoader,
-        val_dataloader: DataLoader,
+        val_dataloaders: DataLoader,
         local_rank: int = 0,
         global_rank: int = 0,
         world_size: int = 1,
@@ -74,7 +74,7 @@ class PytorchTrainer:
         self.is_main_process = global_rank == 0
         self.is_distributed = world_size > 1
         self.train_dataloader = train_dataloader
-        self.val_dataloader = val_dataloader
+        self.val_dataloaders = val_dataloaders
         self._device = model.device
         self.model = model
 
@@ -238,19 +238,19 @@ class PytorchTrainer:
         self.model.eval()
         to_log: dict[str, Any] = {}
 
-        for dataset_name, val_dataloader in tqdm(
-            iterable=self.val_dataloaders.items(), disable=not self.is_main_process
+        for val_dataloader in tqdm(
+            iterable=self.val_dataloaders, disable=not self.is_main_process
         ):
             val_loss_acc = torch.tensor(0.0, device=self._device)
             val_num_tokens = torch.tensor(0, device=self._device)
 
             for batch in val_dataloader:
-                batch = batch.to(self._device)
+                self.batch_to_device(batch)
 
                 # pure inference_mode is incompatible with FSDP, so I use no_grad()
                 with torch.no_grad():
                     outputs = self.model(batch)
-                val_loss_acc += outputs["loss_full"]
+                val_loss_acc += outputs["loss"]
                 val_num_tokens += outputs["num_tokens"]
 
             if self.is_distributed:
@@ -259,7 +259,7 @@ class PytorchTrainer:
 
             val_loss_mean = val_loss_acc / val_num_tokens
 
-            to_log[f"val/{dataset_name}/val_loss_mean"] = val_loss_mean.item()
+            to_log[f"val/val_loss_mean"] = val_loss_mean.item()
 
         self.model.train()
         return to_log
@@ -338,16 +338,18 @@ class PytorchTrainer:
         else:
             return {}
 
+    def batch_to_device(self, micro_batch: BatchEncoding):
+        for key, value in micro_batch.items():
+            if isinstance(value, torch.Tensor):
+                micro_batch[key] = value.to(self._device)
+
     def accumulation_step(self, micro_batch: BatchEncoding):
         # If this is the first micro-batch in an accumulation cycle, start timing
         if (self.micro_batches_done + 1) % self.accum_steps == 0:
             self.step_start_time = time.time()
 
-        for key, value in micro_batch.items():
-            if isinstance(value, torch.Tensor):
-                micro_batch[key] = value.to(self._device)
+        self.batch_to_device(micro_batch)
         forward_dict = self.model(micro_batch)
-        # loss_full is sum of CE for all tokens.
         loss = forward_dict["loss"]
         loss.backward()
 

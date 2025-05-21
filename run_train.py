@@ -27,17 +27,17 @@ def setup_seed(seed=0xDEADC0DE, cudnn_benchmark=True):
 
 
 def train(config: DictConfig) -> None:
-    # wandb.login(key=os.environ["WANDB_KEY"], host=os.environ["WANDB_HOST"])
+    wandb.login(key=os.environ["WANDB_KEY"], host=os.environ["WANDB_HOST"])
     wandb.init(
         project="codi",
         name=os.environ["WANDB_NAME"],
-        mode="disabled",
+        # mode="disabled",
     )
     # wandb.config.update(config)
     setup_seed()
 
     # Initialize dataloader and model
-    train_dataloader, val_dataloader = get_dataloader(config)
+    train_dataloader, val_dataloaders = get_dataloader(config)
     model = BaseModel(config=config)
 
     # Initialize trainer
@@ -45,7 +45,7 @@ def train(config: DictConfig) -> None:
         config.train,
         model,
         train_dataloader,
-        val_dataloader,
+        val_dataloaders,
         perform_sanity_check=True,
     )
 

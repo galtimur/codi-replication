@@ -45,10 +45,9 @@ class GSM8kDataset(Dataset):
             else:
                 processed_cot = original_cot
         else:
-            # TODO: this actually happened so we need to skip those I guess
-            raise ValueError(
-                "There is only one step in the CoT and it contains the answer"
-            )
+            # for this we leave the original cot
+            processed_cot = original_cot
+            ### TODO: this is a hack, we should actually skip this sample
 
         ### TODO: check all the spaces!?
 
@@ -138,13 +137,7 @@ def collate_fn(batch, tokenizer, max_seq_length):
         ),
         "semicolon_position_from_end_teacher_full": torch.tensor(
             semicolon_pos, dtype=torch.long
-        ),
-        # This is needed for debugging
-        "question_str": [item["question_str"] for item in batch],
-        "answer_str": [item["answer_str"] for item in batch],
-        "teacher_full_str": [item["teacher_full_str"] for item in batch],
-        "raw_cot": [item["raw_cot"] for item in batch],
-        "processed_cot": [item["processed_cot"] for item in batch],
+        )
     }
 
 
@@ -192,7 +185,7 @@ def get_dataloader(config):
             batch_arg, test_dataset.tokenizer, config.model.max_length
         ),
     )
-    return train_dataloader, test_dataloader
+    return train_dataloader, [test_dataloader]
 
 
 if __name__ == "__main__":
