@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from omegaconf import DictConfig, OmegaConf
 from peft import LoraConfig, get_peft_model
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import PreTrainedModel, AutoTokenizer, AutoModelForCausalLM
 
 
 class BaseModel(nn.Module):
@@ -36,6 +36,22 @@ class BaseModel(nn.Module):
             lora_config = LoraConfig(**self.config.lora)
             self.llm = get_peft_model(self.llm, lora_config)
         self.llm = self.llm.to(self.device)
+        # for name, module in self.model.named_children():
+        #     setattr(self, name, module)
+
+    def forward(self, batch, *args, **kwargs):
+        input_ids = batch["teacher_full_input_ids"]
+        attention_mask = batch["teacher_full_attention_mask"]
+        return self.llm.forward(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            labels=input_ids,
+            *args,
+            **kwargs
+        )
+
+    def generate(self, *args, **kwargs):
+        return self.llm.generate(*args, **kwargs)
 
 
 class CODIModel(nn.Module):

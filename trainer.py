@@ -348,7 +348,7 @@ class PytorchTrainer:
                 micro_batch[key] = value.to(self._device)
         forward_dict = self.model(micro_batch)
         # loss_full is sum of CE for all tokens.
-        loss = forward_dict["loss_full"] / self.compensation_constant
+        loss = forward_dict["loss"]
         loss.backward()
 
         # Note that number of micro_batches_done is counted on each device
