@@ -255,16 +255,18 @@ class CODIModel(nn.Module):
         """
 
         question_ids = question_ids.to(self.llm.device)
+        q_attn_mask = (question_ids != self.tokenizer.pad_token_id).int()
         batch_size = question_ids.size(0)
 
         question_embeds = self.llm.get_input_embeddings()(question_ids)
-        past_key_values = self.run_cot_loop(question_embeds)
+        past_key_values, q_cot_mask = self.run_cot_loop(question_embeds, q_attn_mask)
         expanded_eot_emb = (
             self.eot_embedding.unsqueeze(0).unsqueeze(0).expand(batch_size, 1, -1)
         )
 
         generated_token_ids = []
         current_embed = expanded_eot_emb
+        current_mask = q_cot_mask
 
         # Generation loop
         for i in range(max_length):
@@ -273,6 +275,15 @@ class CODIModel(nn.Module):
                     inputs_embeds=current_embed,
                     past_key_values=past_key_values,
                     use_cache=True,
+                    attention_mask=current_mask,
+                )
+                new_token_mask = torch.ones(
+                    current_attention_mask.size(0),
+                    1,
+                    device=current_attention_mask.device,
+                )
+                current_attention_mask = torch.cat(
+                    [current_attention_mask, new_token_mask], dim=1
                 )
 
             next_token_logits = outputs.logits[:, -1, :]
