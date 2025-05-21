@@ -147,7 +147,6 @@ class PytorchTrainer:
             warmup_steps,
             total_steps)
 
-
     def save_checkpoint(self, batches_done: int, batches_to_save: int = 1000):
         # TODO still not implemented
         '''
@@ -343,7 +342,9 @@ class PytorchTrainer:
         if (self.micro_batches_done + 1) % self.accum_steps == 0:
             self.step_start_time = time.time()
 
-        micro_batch = micro_batch.to(self._device)
+        for key, value in micro_batch.items():
+            if isinstance(value, torch.Tensor):
+                micro_batch[key] = value.to(self._device)
         forward_dict = self.model(micro_batch)
         # loss_full is sum of CE for all tokens.
         loss = forward_dict["loss_full"] / self.compensation_constant

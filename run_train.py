@@ -41,7 +41,7 @@ def train(config: DictConfig) -> None:
     # Initialize dataloader and model
     train_dataloader = get_dataloader(config)
     val_dataloaders = get_dataloader(config)
-    model = BaseModel(config = config).llm
+    model = BaseModel(config = config)
 
     # Initialize trainer
     trainer = PytorchTrainer(
