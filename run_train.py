@@ -27,7 +27,7 @@ def setup_seed(seed=0xDEADC0DE, cudnn_benchmark=True):
 
 
 def train(config: DictConfig) -> None:
-    # wandb.login(key=os.environ["WANDB_KEY"], host=os.environ["WANDB_HOST"])
+    wandb.login(key=os.environ["WANDB_KEY"], host=os.environ["WANDB_HOST"])
     wandb.init(
         project="codi",
         name=os.environ["WANDB_NAME"],
