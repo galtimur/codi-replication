@@ -77,7 +77,6 @@ def collate_fn(batch, tokenizer, max_seq_length):
     answer_strs = [item["answer_str"] for item in batch]
     teacher_full_strs = [item["teacher_full_str"] for item in batch]
 
-    original_padding_side = tokenizer.padding_side
 
     # 1. Tokenize questions (bos+question+bot) with padding on the left
     tokenizer.padding_side = "left"
@@ -104,7 +103,7 @@ def collate_fn(batch, tokenizer, max_seq_length):
     answer_input_ids = tokenized_answer.input_ids
     answer_attention_mask = tokenized_answer.attention_mask
 
-    # 3. Tokenize teacher_full sequences (bos+question+cot+TheAnswerIs:{answer}+eos) with padding on the right
+    # 3. Tokenize teacher_full sequences (bos+question+cot+TheAnswerIs:{answer}+eos) with padding on the left
     tokenized_teacher_full = tokenizer(
         teacher_full_strs,
         padding="longest",
@@ -115,6 +114,17 @@ def collate_fn(batch, tokenizer, max_seq_length):
     )
     teacher_full_input_ids = tokenized_teacher_full.input_ids
     teacher_full_attention_mask = tokenized_teacher_full.attention_mask
+    teacher_full_loss_mask = teacher_full_attention_mask.clone()
+
+    # Get question lengths for each item in batch
+    question_lengths = tokenized_questions.attention_mask.sum(dim=1).tolist()
+    
+    batch_size = len(question_lengths)
+    for i in range(batch_size):
+        padding_end = teacher_full_loss_mask[i].nonzero()[0].item()
+        mask_end = padding_end + question_lengths[i] - 3
+        teacher_full_loss_mask[i, padding_end:mask_end] = 0
+    
 
     # Calculate answer lengths once
     answer_lengths = [
@@ -132,6 +142,7 @@ def collate_fn(batch, tokenizer, max_seq_length):
         "answer_attention_mask": answer_attention_mask,
         "teacher_full_input_ids": teacher_full_input_ids,
         "teacher_full_attention_mask": teacher_full_attention_mask,
+        "teacher_full_loss_mask": teacher_full_loss_mask,
         "semicolon_position_from_end_answer": torch.tensor(
             semicolon_pos, dtype=torch.long
         ),
