@@ -414,7 +414,7 @@ class PytorchTrainer:
         if self.scheduler is not None:
             self.scheduler.step()
 
-        loss_to_log = self.loss_acc * self.compensation_constant / self.num_tokens
+        loss_to_log = self.loss_acc / self.accum_steps
         to_log["train/loss_batch"] = loss_to_log.item()
         to_log["lr"] = lr
         self.total_tokens += int(self.num_tokens.item())
