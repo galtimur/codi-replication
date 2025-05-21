@@ -123,10 +123,20 @@ class CODIModel(nn.Module):
         self.eot_embedding = embedding_layer.weight[eot_token_id]
 
     def run_cot_loop(
-        self, quest_embeds: torch.Tensor, q_attn_mask: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        self, quest_embeds: torch.Tensor, q_attn_mask: torch.Tensor
+    ) -> tuple[tuple[torch.Tensor], torch.Tensor]:
         past_key_values = None
         current_attention_mask = q_attn_mask
         for i in range(self.cot_length):
+            if i > 0:
+                new_token_mask = torch.ones(
+                    current_attention_mask.size(0),
+                    1,
+                    device=current_attention_mask.device,
+                )
+                current_attention_mask = torch.cat(
+                    [current_attention_mask, new_token_mask], dim=1
+                )
             # No causal masking, as the model is already causal
             student_outputs = self.llm(
                 inputs_embeds=quest_embeds,
@@ -139,14 +149,9 @@ class CODIModel(nn.Module):
             )
             quest_embeds = last_output_vectors
             past_key_values = student_outputs.past_key_values
-            new_token_mask = torch.ones(
-                current_attention_mask.size(0), 1,
-                device=current_attention_mask.device
-            )
-            current_attention_mask = torch.cat([current_attention_mask, new_token_mask], dim=1)
 
         del last_output_vectors, student_outputs, quest_embeds
-        return past_key_values
+        return past_key_values, current_attention_mask
 
     def calc_distil_loss(
         self,
@@ -179,14 +184,19 @@ class CODIModel(nn.Module):
         question_ids = batch["question_input_ids"].to("cuda")
         answer_ids = batch["answer_input_ids"].to("cuda")
         q_attn_mask = batch["question_attention_mask"].to("cuda")
+        a_attn_mask = batch["answer_attention_mask"].to("cuda")
         question_embeds = self.llm.get_input_embeddings()(question_ids)
         answer_embed = self.llm.get_input_embeddings()(answer_ids)
 
-        past_key_values = self.run_cot_loop(question_embeds, q_attn_mask)
+        past_key_values, attn_msk_q_cot = self.run_cot_loop(
+            question_embeds, q_attn_mask
+        )
+        attn_msk_q_cot_a = torch.cat([attn_msk_q_cot, a_attn_mask], dim=1)
         answer_result = self.llm(
             inputs_embeds=answer_embed,
             labels=answer_ids,
             past_key_values=past_key_values,
+            attention_mask=attn_msk_q_cot_a,
             output_hidden_states=True,
         )
         answer_result["num_tokens"] = torch.sum(batch["teacher_full_attention_mask"])
