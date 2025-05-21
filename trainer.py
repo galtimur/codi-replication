@@ -21,7 +21,6 @@ from tqdm import tqdm
 from transformers import BatchEncoding, get_cosine_schedule_with_warmup
 
 import wandb
-from codi_model import BaseModel, CODIModel
 
 
 def scale_grads(model: nn.Module, scaler: torch.Tensor) -> None:
@@ -260,7 +259,7 @@ class PytorchTrainer:
             val_loss_acc = torch.tensor(0.0, device=self._device)
             val_num_tokens = torch.tensor(0, device=self._device)
 
-            for batch in val_dataloader:
+            for i, batch in enumerate(val_dataloader):
                 self.batch_to_device(batch)
 
                 # pure inference_mode is incompatible with FSDP, so I use no_grad()
@@ -269,6 +268,15 @@ class PytorchTrainer:
                 val_loss_acc += outputs["loss"]
                 val_num_tokens += outputs["num_tokens"]
 
+                if i % 50 == 0 and self.is_main_process:
+                    decoded_text = self.model.tokenizer.decode(outputs.logits[0].argmax(dim=-1), skip_special_tokens=True)
+                    text_to_log = f"Validation Sample (dataloader iter {i}):\n{decoded_text}"
+                    text_sample_table = wandb.Table(columns=["Generated Text"], data=[[text_to_log]])
+                    wandb.log({
+                        "val/generated_text_sample": text_sample_table
+                    }, step=self.batches_done)
+
+    
             if self.is_distributed:
                 dist.all_reduce(val_loss_acc, op=dist.ReduceOp.SUM)
                 dist.all_reduce(val_num_tokens, op=dist.ReduceOp.SUM)
@@ -414,7 +422,7 @@ class PytorchTrainer:
         if self.scheduler is not None:
             self.scheduler.step()
 
-        loss_to_log = self.loss_acc * self.compensation_constant / self.num_tokens
+        loss_to_log = self.loss_acc / self.accum_steps
         to_log["train/loss_batch"] = loss_to_log.item()
         to_log["lr"] = lr
         self.total_tokens += int(self.num_tokens.item())
