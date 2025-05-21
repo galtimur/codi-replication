@@ -3,16 +3,45 @@ from pathlib import Path
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from omegaconf import OmegaConf
+from omegaconf import OmegaConf, DictConfig
 from peft import LoraConfig, get_peft_model
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-
-class CODIModel(nn.Module):
-    def __init__(self, config_path: str | Path = "configs/config.yaml"):
+class BaseModel(nn.Module):
+    def __init__(self, config: DictConfig | None = None, config_path: str | Path = "configs/config.yaml"):
         super().__init__()
 
-        self.config = OmegaConf.load(config_path).model
+        if config is not None:
+            self.config = OmegaConf.load(config_path).model
+        else:
+            self.config = config
+        self.model_name = self.config.model_name_or_path
+        self.max_length = self.config.max_length
+        self.device = "cuda"
+
+        self.init_tokenizer_and_model()
+
+    def init_tokenizer_and_model(self):
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+        self.tokenizer.pad_token = self.tokenizer.eos_token
+        self.llm = AutoModelForCausalLM.from_pretrained(
+            self.model_name, torch_dtype=torch.bfloat16
+        )
+        if self.config.use_lora:
+            lora_config = LoraConfig(**self.config.lora)
+            self.llm = get_peft_model(self.llm, lora_config)
+        self.llm = self.llm.to(self.device)
+
+
+class CODIModel(nn.Module):
+    def __init__(self, config: DictConfig | None = None, config_path: str | Path = "configs/config.yaml"):
+        super().__init__()
+
+        if config is not None:
+            self.config = OmegaConf.load(config_path).model
+        else:
+            self.config = config
+        self.device = "cuda"
         self.model_name = self.config.model_name_or_path
         self.max_length = self.config.max_length
         self.cot_length = self.config.cot_length
@@ -34,7 +63,7 @@ class CODIModel(nn.Module):
         if self.config.use_lora:
             lora_config = LoraConfig(**self.config.lora)
             self.llm = get_peft_model(self.llm, lora_config)
-        self.llm = self.llm.to("cuda")
+        self.llm = self.llm.to(self.device)
 
     def init_projections(self):
         self.proj = nn.Sequential(

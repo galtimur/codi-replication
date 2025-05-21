@@ -13,6 +13,15 @@ model:
   bot_token: "<bot>"
   eot_token: "<eot>"
   device: "cuda:7"
+train:
+  effective_batch_size: 16
+  num_epochs: 2
+  max_length: 256
+  save_checkpoints_every: 10000 # num of batches
+  validate_every: 1000 # num of batches
+  warmup_ratio: 0.03
+  optimizer:
+    lr: 1e-4
 
 DATASET_NAME: "zen-E/GSM8k-Aug"
 DATASET_SPLIT_TRAIN: "train"

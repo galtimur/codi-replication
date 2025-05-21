@@ -3,7 +3,6 @@ from omegaconf import OmegaConf
 from transformers import AutoTokenizer
 from codi_model import CODIModel
 from data import get_dataset, get_dataloader, Config
-from torch.utils.data import DataLoader
 
 
 def main():
