@@ -145,7 +145,7 @@ class PytorchTrainer:
         self, config: DictConfig, total_steps: int, warmup_steps: int
     ):
         self.optimizer = torch.optim.AdamW(
-            self.model.parameters(),         # this is changed from model.llm, be careful?
+            self.model.parameters(),  # this is changed from model.llm, be careful?
             **config.optimizer,
         )
         self.scheduler = get_cosine_schedule_with_warmup(
@@ -159,33 +159,33 @@ class PytorchTrainer:
 
                 checkpoint_dir = Path(self.config.save_checkpoints_dir)
                 checkpoint_dir.mkdir(parents=True, exist_ok=True)
-                
+
                 checkpoint_path = checkpoint_dir / f"checkpoint_{batches_done}.pt"
-                
+
                 checkpoint_dict = {
                     "model_state_dict": self.model.state_dict(),
                     "optimizer_state_dict": self.optimizer.state_dict(),
-                    "scheduler_state_dict": self.scheduler.state_dict() if self.scheduler else None,
+                    "scheduler_state_dict": self.scheduler.state_dict()
+                    if self.scheduler
+                    else None,
                     "batches_done": batches_done,
                     "micro_batches_done": self.micro_batches_done,
                     "total_tokens": self.total_tokens,
                     "throughput_history": self.throughput_history,
-                    "total_training_time": self.total_training_time
+                    "total_training_time": self.total_training_time,
                 }
-                
+
                 torch.save(checkpoint_dict, checkpoint_path)
                 print(f"Checkpoint saved in {time.time() - time_start} s.")
 
-            
-
     def load_checkpoint(self, checkpoint_path: str):
         checkpoint = torch.load(checkpoint_path, map_location=self._device)
-        
+
         self.model.load_state_dict(checkpoint["model_state_dict"])
         self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         if self.scheduler and checkpoint["scheduler_state_dict"]:
             self.scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
-            
+
         self.batches_done = checkpoint["batches_done"]
         self.micro_batches_done = checkpoint["micro_batches_done"]
         self.total_tokens = checkpoint["total_tokens"]
@@ -337,7 +337,7 @@ class PytorchTrainer:
                 self.val_steps.remove(self.batches_done)
 
             # inside is decided to save the checkpoint or not
-            self.save_checkpoint(self.batches_done)            
+            self.save_checkpoint(self.batches_done)
 
             if to_log:
                 wandb.log(to_log, step=self.batches_done)
