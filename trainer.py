@@ -1,6 +1,6 @@
-'''
+"""
 File is taken from kotlin-initiative repo
-'''
+"""
 
 import math
 import time
@@ -8,18 +8,17 @@ import traceback
 import warnings
 from functools import partial
 from typing import Annotated, Any, Iterable
-from omegaconf import OmegaConf, DictConfig
 
 import pandas as pd
 import torch
 import torch.distributed as dist
+from omegaconf import DictConfig, OmegaConf
 from torch import nn
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import BatchEncoding, get_cosine_schedule_with_warmup
 
 import wandb
-
 from codi_model import BaseModel, CODIModel
 
 
@@ -48,24 +47,26 @@ def scale_grads(model: nn.Module, scaler: torch.Tensor) -> None:
 
 @torch.no_grad()
 def get_norm(model_parameters: Iterable[torch.Tensor], max_norm: float) -> float:
-    grad_norm = torch.nn.utils.clip_grad_norm_(model_parameters, max_norm, norm_type=2.0)
+    grad_norm = torch.nn.utils.clip_grad_norm_(
+        model_parameters, max_norm, norm_type=2.0
+    )
 
     return grad_norm.item()
 
 
 class PytorchTrainer:
     def __init__(
-            self,
-            config: DictConfig,
-            model,
-            train_dataloader: DataLoader,
-            val_dataloader: DataLoader,
-            local_rank: int = 0,
-            global_rank: int = 0,
-            world_size: int = 1,
-            perform_sanity_check: bool = True,
-            is_mixed: bool = False,
-            use_grad_scaler: bool = False,
+        self,
+        config: DictConfig,
+        model,
+        train_dataloader: DataLoader,
+        val_dataloader: DataLoader,
+        local_rank: int = 0,
+        global_rank: int = 0,
+        world_size: int = 1,
+        perform_sanity_check: bool = True,
+        is_mixed: bool = False,
+        use_grad_scaler: bool = False,
     ):
         self.local_rank = local_rank
         self.global_rank = global_rank
@@ -137,21 +138,22 @@ class PytorchTrainer:
             self.sanity_check()
             self._barrier()
 
-    def setup_optimizer_and_scheduler(self, config: DictConfig, total_steps: int, warmup_steps: int):
+    def setup_optimizer_and_scheduler(
+        self, config: DictConfig, total_steps: int, warmup_steps: int
+    ):
         self.optimizer = torch.optim.AdamW(
             self.model.llm.parameters(),
             **config.optimizer,
         )
         self.scheduler = get_cosine_schedule_with_warmup(
-            self.optimizer,
-            warmup_steps,
-            total_steps)
+            self.optimizer, warmup_steps, total_steps
+        )
 
     def save_checkpoint(self, batches_done: int, batches_to_save: int = 1000):
         # TODO still not implemented
-        '''
+        """
         Saving checkpoint
-        '''
+        """
         if self.is_main_process:
             checkpoint_dict = {
                 "model": self.model.state_dict(),
@@ -221,7 +223,6 @@ class PytorchTrainer:
         if self.is_distributed:
             dist.barrier()
 
-
     @staticmethod
     def _sort_df_by_task_id(df: pd.DataFrame) -> pd.DataFrame:
         sorted_df = df.sort_values(
@@ -238,7 +239,7 @@ class PytorchTrainer:
         to_log: dict[str, Any] = {}
 
         for dataset_name, val_dataloader in tqdm(
-                iterable=self.val_dataloaders.items(), disable=not self.is_main_process
+            iterable=self.val_dataloaders.items(), disable=not self.is_main_process
         ):
             val_loss_acc = torch.tensor(0.0, device=self._device)
             val_num_tokens = torch.tensor(0, device=self._device)
@@ -300,8 +301,8 @@ class PytorchTrainer:
 
     def run_epoch(self):
         for micro_batch in tqdm(
-                iterable=self.train_dataloader,
-                disable=not self.is_main_process,  # Only show progress bar on main process
+            iterable=self.train_dataloader,
+            disable=not self.is_main_process,  # Only show progress bar on main process
         ):
             to_log = {}
             to_log |= self.training_step(micro_batch)
@@ -350,10 +351,6 @@ class PytorchTrainer:
         loss = forward_dict["loss_full"] / self.compensation_constant
         loss.backward()
 
-        unshifted_logits = torch.cat(
-            [forward_dict["logits"], forward_dict["logits"][:, -1:, :].clone()], dim=1
-        )
-
         # Note that number of micro_batches_done is counted on each device
         self.micro_batches_done += 1
         self.loss_acc += loss
@@ -379,8 +376,12 @@ class PytorchTrainer:
             self.throughput_history.append(current_throughput)
             # Keep only the most recent window_size entries
             if len(self.throughput_history) > self.throughput_window_size:
-                self.throughput_history = self.throughput_history[-self.throughput_window_size:]
-            self.moving_avg_throughput = sum(self.throughput_history) / len(self.throughput_history)
+                self.throughput_history = self.throughput_history[
+                    -self.throughput_window_size :
+                ]
+            self.moving_avg_throughput = sum(self.throughput_history) / len(
+                self.throughput_history
+            )
             self.tokens_per_second = current_throughput
 
         # Scale the gradients from unnormalized loss by total # of tokens
@@ -411,7 +412,9 @@ class PytorchTrainer:
 
         # Calculate and log additional performance metrics
         if self.total_training_time > 0:
-            to_log["performance/avg_tokens_per_second"] = self.total_tokens / self.total_training_time
+            to_log["performance/avg_tokens_per_second"] = (
+                self.total_tokens / self.total_training_time
+            )
 
         # Log batch statistics
         to_log["performance/batch_time_seconds"] = step_time
@@ -420,8 +423,12 @@ class PytorchTrainer:
 
         # If using multiple GPUs, log per-GPU throughput
         if self.world_size > 1:
-            to_log["performance/tokens_per_second_per_gpu"] = self.tokens_per_second / self.world_size
-            to_log["performance/moving_avg_throughput_per_gpu"] = self.moving_avg_throughput / self.world_size
+            to_log["performance/tokens_per_second_per_gpu"] = (
+                self.tokens_per_second / self.world_size
+            )
+            to_log["performance/moving_avg_throughput_per_gpu"] = (
+                self.moving_avg_throughput / self.world_size
+            )
 
         self.batches_done += 1
         self.loss_acc.zero_()

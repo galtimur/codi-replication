@@ -1,6 +1,6 @@
-'''
+"""
 File is taken from kotlin-initiative repo
-'''
+"""
 
 from typing import List, Literal
 
@@ -75,12 +75,10 @@ class ModelConfig(PydanticBaseModel):
 class FSDPConfig(PydanticBaseModel):
     enable_activation_checkpointing: bool = False  # True reduces memory
     enable_activation_offloading: bool = False  # True reduces memory
-    custom_sharded_layers: list[str] | None = (
-        None  # Layers to shard separately (useful for large vocab size models). Lower Memory, but lower speed.
-    )
-    fsdp_cpu_offload: bool = (
-        False  # Offloads model parameters to CPU during training. Used to fit model into GPU
-    )
+    custom_sharded_layers: list[
+        str
+    ] | None = None  # Layers to shard separately (useful for large vocab size models). Lower Memory, but lower speed.
+    fsdp_cpu_offload: bool = False  # Offloads model parameters to CPU during training. Used to fit model into GPU
     # Setting fsdp_reshard_after_forward to True corresponds to the FULL_SHARD sharding strategy from FSDP1,
     # while setting it to False corresponds to the SHARD_GRAD_OP sharding strategy.
     fsdp_reshard_after_forward: bool = True

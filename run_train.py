@@ -1,23 +1,23 @@
-'''
+"""
 File is taken from kotlin-initiative repo
-'''
+"""
 
 
 import os
-import numpy as np
 import random
+
+import numpy as np
 import torch
-
 from dotenv import load_dotenv
-from omegaconf import OmegaConf, DictConfig
-import wandb
+from omegaconf import DictConfig, OmegaConf
 
-from trainer import PytorchTrainer
+import wandb
+from codi_model import BaseModel, CODIModel
 from data import get_dataloader
-from codi_model import CODIModel, BaseModel
+from trainer import PytorchTrainer
+
 
 def setup_seed(seed=0xDEADC0DE, cudnn_benchmark=True):
-
     np.random.seed(seed)
     random.seed(seed)
     torch.manual_seed(seed)  # cpu
@@ -27,7 +27,6 @@ def setup_seed(seed=0xDEADC0DE, cudnn_benchmark=True):
 
 
 def train(config: DictConfig) -> None:
-
     # wandb.login(key=os.environ["WANDB_KEY"], host=os.environ["WANDB_HOST"])
     wandb.init(
         project="kotlin_init",
@@ -37,11 +36,10 @@ def train(config: DictConfig) -> None:
     # wandb.config.update(config)
     setup_seed()
 
-
     # Initialize dataloader and model
     train_dataloader = get_dataloader(config)
     val_dataloaders = get_dataloader(config)
-    model = BaseModel(config = config)
+    model = BaseModel(config=config)
 
     # Initialize trainer
     trainer = PytorchTrainer(
@@ -49,16 +47,14 @@ def train(config: DictConfig) -> None:
         model,
         train_dataloader,
         val_dataloaders,
-        perform_sanity_check=True
+        perform_sanity_check=True,
     )
 
     trainer.run_training()
     wandb.finish()
 
 
-
 def main(config_path: str = "configs/config.yaml"):
-
     config = OmegaConf.load(config_path)
 
     load_dotenv()

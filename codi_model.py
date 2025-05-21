@@ -3,12 +3,17 @@ from pathlib import Path
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from omegaconf import OmegaConf, DictConfig
+from omegaconf import DictConfig, OmegaConf
 from peft import LoraConfig, get_peft_model
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+
 class BaseModel(nn.Module):
-    def __init__(self, config: DictConfig | None = None, config_path: str | Path = "configs/config.yaml"):
+    def __init__(
+        self,
+        config: DictConfig | None = None,
+        config_path: str | Path = "configs/config.yaml",
+    ):
         super().__init__()
 
         if config is not None:
@@ -34,7 +39,11 @@ class BaseModel(nn.Module):
 
 
 class CODIModel(nn.Module):
-    def __init__(self, config: DictConfig | None = None, config_path: str | Path = "configs/config.yaml"):
+    def __init__(
+        self,
+        config: DictConfig | None = None,
+        config_path: str | Path = "configs/config.yaml",
+    ):
         super().__init__()
 
         if config is not None:
@@ -53,7 +62,12 @@ class CODIModel(nn.Module):
     def init_tokenizer_and_model(self):
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
         self.tokenizer.add_special_tokens(
-            {"additional_special_tokens": [self.config.bot_token, self.config.eot_token]}
+            {
+                "additional_special_tokens": [
+                    self.config.bot_token,
+                    self.config.eot_token,
+                ]
+            }
         )
         self.tokenizer.pad_token = self.tokenizer.eos_token
         self.llm = AutoModelForCausalLM.from_pretrained(
@@ -82,7 +96,6 @@ class CODIModel(nn.Module):
         ).to("cuda")
 
     def get_eot_vector(self):
-
         eot_token_id = self.tokenizer.convert_tokens_to_ids(self.config.eot_token)
         embedding_layer = self.llm.get_input_embeddings()
         self.eot_embedding = embedding_layer.weight[eot_token_id]
@@ -121,13 +134,13 @@ class CODIModel(nn.Module):
         return answer_result
 
     def generate(
-            self,
-            question_ids: torch.Tensor,
-            max_length: int = 50,
-            temperature: float = 0.2,
-            do_sample: bool = True,
-            top_p: float = 0.9,
-            top_k: int = 50,
+        self,
+        question_ids: torch.Tensor,
+        max_length: int = 50,
+        temperature: float = 0.2,
+        do_sample: bool = True,
+        top_p: float = 0.9,
+        top_k: int = 50,
     ):
         """
         Generate answers for given questions, using the model's chain-of-thought reasoning.
@@ -149,7 +162,9 @@ class CODIModel(nn.Module):
 
         question_embeds = self.llm.get_input_embeddings()(question_ids)
         past_key_values = self.run_cot_loop(question_embeds)
-        expanded_eot_emb = self.eot_embedding.unsqueeze(0).unsqueeze(0).expand(batch_size, 1, -1)
+        expanded_eot_emb = (
+            self.eot_embedding.unsqueeze(0).unsqueeze(0).expand(batch_size, 1, -1)
+        )
 
         generated_token_ids = []
         current_embed = expanded_eot_emb
@@ -166,25 +181,34 @@ class CODIModel(nn.Module):
             next_token_logits = outputs.logits[:, -1, :]
             next_token_logits = next_token_logits / temperature
             if top_k > 0:
-                indices_to_remove = next_token_logits < torch.topk(next_token_logits, top_k)[0][..., -1, None]
-                next_token_logits[indices_to_remove] = -float('Inf')
+                indices_to_remove = (
+                    next_token_logits
+                    < torch.topk(next_token_logits, top_k)[0][..., -1, None]
+                )
+                next_token_logits[indices_to_remove] = -float("Inf")
 
             # Apply top-p (nucleus) filtering
             if top_p < 1.0:
-                sorted_logits, sorted_indices = torch.sort(next_token_logits, descending=True)
-                cumulative_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
+                sorted_logits, sorted_indices = torch.sort(
+                    next_token_logits, descending=True
+                )
+                cumulative_probs = torch.cumsum(
+                    F.softmax(sorted_logits, dim=-1), dim=-1
+                )
 
                 # Remove tokens with cumulative probability above the threshold
                 sorted_indices_to_remove = cumulative_probs > top_p
                 # Shift the indices to the right to keep also the first token above the threshold
-                sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
+                sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[
+                    ..., :-1
+                ].clone()
                 sorted_indices_to_remove[..., 0] = 0
 
                 # Scatter sorted tensors to original indexing
                 indices_to_remove = sorted_indices_to_remove.scatter(
                     dim=1, index=sorted_indices, src=sorted_indices_to_remove
                 )
-                next_token_logits[indices_to_remove] = -float('Inf')
+                next_token_logits[indices_to_remove] = -float("Inf")
 
             # Get next token
             if do_sample:
@@ -205,7 +229,6 @@ class CODIModel(nn.Module):
 
             # Get embedding for the next token
             current_embed = self.llm.get_input_embeddings()(next_token)
-
 
         # Concatenate all tokens
         answer_ids = torch.cat(generated_token_ids, dim=1)
