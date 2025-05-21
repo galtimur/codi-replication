@@ -289,7 +289,7 @@ class PytorchTrainer:
 
                 # Calculate exact match for every sample in batch
                 decoded_texts = [
-                    self.model.tokenizer.decode(outputs.logits[j].argmax(dim=-1), skip_special_tokens=True)
+                    self.model.tokenizer.decode(outputs.logits[j][:-1].argmax(dim=-1), skip_special_tokens=True)
                     for j in range(len(batch["answer_text"]))
                 ]
 
