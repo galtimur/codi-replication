@@ -43,10 +43,12 @@ class BaseModel(nn.Module):
     def forward(self, batch, *args, **kwargs):
         input_ids = batch["teacher_full_input_ids"]
         attention_mask = batch["teacher_full_attention_mask"]
+        loss_mask = batch["teacher_full_loss_mask"]
+        labels = input_ids.masked_fill(loss_mask == 0, -100)
         outputs = self.llm.forward(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            labels=input_ids,
+            labels=labels,
             *args,
             **kwargs
         )
