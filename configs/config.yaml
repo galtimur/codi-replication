@@ -18,14 +18,14 @@ model:
   beta: 1
   gamma: 1
 train:
-  effective_batch_size: 16
-  num_epochs: 2
+  effective_batch_size: 128
+  num_epochs: 3
   max_length: 256
   save_checkpoints_every: 10000 # num of batches
   save_checkpoints_dir: "./checkpoints"
   resume_from: "" # "./checkpoints/checkpoint_10000.pt" 
   validate_every: 1000 # num of batches
-  warmup_ratio: 0.03
+  warmup_ratio: 0.05
   optimizer:
     lr: 1e-4
 
@@ -35,7 +35,7 @@ data:
     split_train: "train"
     split_test: "test"
   dataloader:
-    batch_size: 16 # Reduced for now
+    batch_size: 128 # Reduced for now
     train_shuffle: true
     test_shuffle: false
-    num_workers: 0 # Reduced for now
+    num_workers: 8 # Reduced for now
