@@ -127,17 +127,20 @@ def collate_fn(batch, tokenizer, max_seq_length):
     batch_size = len(question_lengths)
     for i in range(batch_size):
         padding_end = teacher_full_loss_mask[i].nonzero()[0].item()
-        mask_end = padding_end + question_lengths[i] - 3
-        teacher_full_loss_mask[i, padding_end:mask_end-1] = 0
-    
+        mask_end = padding_end + question_lengths[i]
+        # selected_elements = teacher_full_input_ids[i][teacher_full_loss_mask[i] == 1]
+        # sel_str1 = tokenizer.decode(selected_elements)
+        teacher_full_loss_mask[i, :mask_end-1] = 0
+
     # Get the token ID for ":"
     colon_token_id = tokenizer.encode(":")[0]
     # Compute distance from end for the last ":" in each sequence
     def get_last_colon_pos(sequences, colon_id):
-        colon_positions = (sequences == colon_id).nonzero(as_tuple=True)[1]
-        batch_indices = torch.arange(sequences.size(0), device=sequences.device)
-        last_colons = torch.searchsorted(colon_positions, batch_indices[1:], right=True) - 1
-        distances = sequences.size(1) - colon_positions[last_colons]
+        seq_ind, colon_positions_found = (sequences == colon_id).nonzero(as_tuple=True)
+        median_pos = round(colon_positions_found.median().item())
+        colon_positions = median_pos*torch.ones(len(sequences), dtype=torch.int64)
+        colon_positions[seq_ind] = colon_positions_found
+        distances = sequences.size(1) - colon_positions
         return distances.to(dtype=torch.long)
 
     answer_semicolon_pos = get_last_colon_pos(answer_input_ids, colon_token_id)
