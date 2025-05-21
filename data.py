@@ -138,6 +138,7 @@ def collate_fn(batch, tokenizer, max_seq_length):
         "semicolon_position_from_end_teacher_full": torch.tensor(
             semicolon_pos, dtype=torch.long
         ),
+        "answer_text": [item["answer_text"] for item in batch],
     }
 
 

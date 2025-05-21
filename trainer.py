@@ -258,8 +258,13 @@ class PytorchTrainer:
         ):
             val_loss_acc = torch.tensor(0.0, device=self._device)
             val_num_tokens = torch.tensor(0, device=self._device)
+            match_count = 0
+            total_count = 0
 
             for i, batch in enumerate(val_dataloader):
+                # GT: batch["answer_text"]
+                # Pred: decoded_text
+
                 self.batch_to_device(batch)
 
                 # pure inference_mode is incompatible with FSDP, so I use no_grad()
@@ -268,22 +273,33 @@ class PytorchTrainer:
                 val_loss_acc += outputs["loss"]
                 val_num_tokens += outputs["num_tokens"]
 
-                if i % 50 == 0 and self.is_main_process:
-                    decoded_text = self.model.tokenizer.decode(outputs.logits[0].argmax(dim=-1), skip_special_tokens=True)
-                    text_to_log = f"Validation Sample (dataloader iter {i}):\n{decoded_text}"
+                # Calculate exact match for every sample in batch
+                decoded_texts = [
+                    self.model.tokenizer.decode(outputs.logits[j].argmax(dim=-1), skip_special_tokens=True)
+                    for j in range(len(batch["answer_text"]))
+                ]
+                
+                for decoded_text, true_answer in zip(decoded_texts, batch["answer_text"]):
+                    pred_answer = decoded_text.split(":")[-1].strip().lower()
+                    true_answer = true_answer.strip().lower()
+                    if pred_answer == true_answer:
+                        match_count += 1
+                    total_count += 1
+
+                # Log just the first sample text from first batch
+                if i == 0 and self.is_main_process:
+                    text_to_log = f"Validation Sample:\n{decoded_texts[0]}"
                     text_sample_table = wandb.Table(columns=["Generated Text"], data=[[text_to_log]])
                     wandb.log({
                         "val/generated_text_sample": text_sample_table
                     }, step=self.batches_done)
 
-    
-            if self.is_distributed:
-                dist.all_reduce(val_loss_acc, op=dist.ReduceOp.SUM)
-                dist.all_reduce(val_num_tokens, op=dist.ReduceOp.SUM)
 
             val_loss_mean = val_loss_acc / val_num_tokens
+            exact_match_rate = match_count / total_count if total_count > 0 else 0.0
 
             to_log[f"val/val_loss_mean"] = val_loss_mean.item()
+            to_log[f"val/exact_match"] = exact_match_rate
 
         self.model.train()
         return to_log

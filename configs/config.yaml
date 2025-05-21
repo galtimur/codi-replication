@@ -23,7 +23,7 @@ train:
   max_length: 256
   save_checkpoints_every: 10000 # num of batches
   save_checkpoints_dir: "./checkpoints"
-  resume_from: "" # "./checkpoints/checkpoint_400.pt" 
+  resume_from: "" # "./checkpoints/checkpoint_10000.pt" 
   validate_every: 1000 # num of batches
   warmup_ratio: 0.03
   optimizer:
