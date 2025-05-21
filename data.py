@@ -52,15 +52,18 @@ class GSM8kDataset(Dataset):
         ### TODO: check all the spaces!?
 
         # 1) bos+question+bot
-        question_str = f"{self.tokenizer.bos_token}{question_text}{self.bot_token}"
+        # question_str = f"{self.tokenizer.bos_token}{question_text}{self.bot_token}"
+        question_str = question_text
 
         # 2) eot+TheAnswerIs:{answer}+eos
-        answer_str = (
-            f"{self.eot_token}The answer is:{answer_text}{self.tokenizer.eos_token}"
-        )
+        # answer_str = (
+        #     f"{self.eot_token}The answer is:{answer_text}{self.tokenizer.eos_token}"
+        # )
+        answer_str = f"The answer is:{answer_text}"
 
         # 3) bos+question+cot+TheAnswerIs:{answer}+eos
-        teacher_full_str = f"{self.tokenizer.bos_token}{question_text}{processed_cot}The answer is:{answer_text}{self.tokenizer.eos_token}"
+        # teacher_full_str = f"{self.tokenizer.bos_token}{question_text}{processed_cot}The answer is:{answer_text}{self.tokenizer.eos_token}"
+        teacher_full_str = f"{question_text}{processed_cot}The answer is:{answer_text}"
 
         return {
             "question_str": question_str,
