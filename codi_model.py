@@ -38,8 +38,6 @@ class BaseModel(nn.Module):
             lora_config = LoraConfig(**self.config.lora)
             self.llm = get_peft_model(self.llm, lora_config)
         self.llm = self.llm.to(self.device)
-        # for name, module in self.model.named_children():
-        #     setattr(self, name, module)
 
     def forward(self, batch, *args, **kwargs):
         input_ids = batch["teacher_full_input_ids"]
@@ -185,6 +183,7 @@ class CODIModel(nn.Module):
 
         question_ids = batch["question_input_ids"].to("cuda")
         answer_ids = batch["answer_input_ids"].to("cuda")
+        answer_ids[answer_ids == self.tokenizer.pad_token_id] = -100
         q_attn_mask = batch["question_attention_mask"].to("cuda")
         a_attn_mask = batch["answer_attention_mask"].to("cuda")
         question_embeds = self.llm.get_input_embeddings()(question_ids)
