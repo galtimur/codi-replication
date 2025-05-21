@@ -14,6 +14,9 @@ model:
   bot_token: "<bot>"
   eot_token: "<eot>"
   device: "cuda:0"
+  alpha: 1
+  beta: 1
+  gamma: 1
 train:
   effective_batch_size: 16
   num_epochs: 2

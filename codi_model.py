@@ -5,7 +5,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from omegaconf import DictConfig, OmegaConf
 from peft import LoraConfig, get_peft_model
-from transformers import PreTrainedModel, AutoTokenizer, AutoModelForCausalLM
+from torch.nn.functional import smooth_l1_loss
+from transformers import AutoTokenizer, AutoModelForCausalLM
 
 
 class BaseModel(nn.Module):
@@ -72,6 +73,9 @@ class CODIModel(nn.Module):
         self.model_name = self.config.model_name_or_path
         self.max_length = self.config.max_length
         self.cot_length = self.config.cot_length
+        self.alpha = self.config.alpha
+        self.beta = self.config.beta
+        self.gamma = self.config.gamma
 
         self.init_tokenizer_and_model()
         self.init_projections()
@@ -138,11 +142,33 @@ class CODIModel(nn.Module):
         del last_output_vectors, student_outputs, quest_embeds
         return past_key_values
 
-    def forward(self, batch: dict[str, torch.Tensor]):
+    def calc_distil_loss(
+        self,
+        batch: dict[str, torch.Tensor],
+        teacher_outputs: dict[str, torch.Tensor],
+        student_outputs: dict[str, torch.Tensor],
+    ):
+        semicolon_pos = batch["semicolon_position_from_end_answer"]
+        batch_indices = torch.arange(student_outputs.logits.size(0), device=self.device)
+        actual_positions_stud = student_outputs.logits.size(1) - 1 - semicolon_pos
+        actual_positions_teach = teacher_outputs.logits.size(1) - 1 - semicolon_pos
+        distill_loss = torch.Tensor([0.0]).to(self.device)
 
-        '''
+        for layer_stud, layer_teach in zip(
+            student_outputs.hidden_states, teacher_outputs.hidden_states
+        ):
+            semicolon_stud_hid = layer_stud[batch_indices, actual_positions_stud]
+            semicolon_teach_hid = layer_teach[batch_indices, actual_positions_teach]
+            distill_loss += (
+                smooth_l1_loss(semicolon_stud_hid, semicolon_teach_hid)
+                / semicolon_teach_hid.std()
+            )
+        return distill_loss
+
+    def forward(self, batch: dict[str, torch.Tensor]):
+        """
         Takes question and answer embeddings and runs the chain-of-thought reasoning.
-        '''
+        """
 
         question_ids = batch["question_input_ids"].to("cuda")
         answer_ids = batch["answer_input_ids"].to("cuda")
@@ -151,11 +177,40 @@ class CODIModel(nn.Module):
 
         past_key_values = self.run_cot_loop(question_embeds)
         answer_result = self.llm(
-            inputs_embeds=answer_embed, labels=answer_ids, past_key_values=past_key_values
+            inputs_embeds=answer_embed,
+            labels=answer_ids,
+            past_key_values=past_key_values,
+            output_hidden_states=True,
         )
         answer_result["num_tokens"] = torch.sum(batch["teacher_full_attention_mask"])
 
         return answer_result
+
+    def forward_with_teacher(self, batch: dict[str, torch.Tensor]):
+        input_ids = batch["teacher_full_input_ids"]
+        attention_mask = batch["teacher_full_attention_mask"]
+        teacher_outputs = self.llm.forward(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            labels=input_ids,
+            output_hidden_states=True,
+        )
+        student_outputs = self.forward(batch)
+
+        distill_loss = self.calc_distil_loss(batch, teacher_outputs, student_outputs)
+        total_loss = (
+            self.alpha * teacher_outputs.loss
+            + self.beta * student_outputs.loss
+            + self.gamma * distill_loss
+        )
+
+        return {
+            "loss": total_loss,
+            "num_tokens": student_outputs["num_tokens"],
+            "teacher_loss": teacher_outputs.loss,
+            "student_loss": student_outputs.loss,
+            "distill_loss": distill_loss,
+        }
 
     def generate(
         self,
