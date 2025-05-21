@@ -91,7 +91,8 @@ def collate_fn(batch, tokenizer, max_seq_length):
     question_input_ids = tokenized_questions.input_ids
     question_attention_mask = tokenized_questions.attention_mask
 
-    # 2. Tokenize answers (TheAnswerIs:{answer}+eos) with padding on the left
+    # 2. Tokenize answers (TheAnswerIs:{answer}+eos) with padding on the right
+    tokenizer.padding_side = "right"
     tokenized_answer = tokenizer(
         answer_strs,
         padding="longest",
@@ -104,6 +105,7 @@ def collate_fn(batch, tokenizer, max_seq_length):
     answer_attention_mask = tokenized_answer.attention_mask
 
     # 3. Tokenize teacher_full sequences (bos+question+cot+TheAnswerIs:{answer}+eos) with padding on the left
+    tokenizer.padding_side = "left"
     tokenized_teacher_full = tokenizer(
         teacher_full_strs,
         padding="longest",
@@ -125,15 +127,18 @@ def collate_fn(batch, tokenizer, max_seq_length):
         mask_end = padding_end + question_lengths[i] - 3
         teacher_full_loss_mask[i, padding_end:mask_end] = 0
     
+    # Get the token ID for ":"
+    colon_token_id = tokenizer.encode(":")[0]
+    # Compute distance from end for the last ":" in each sequence
+    def get_last_colon_pos(sequences, colon_id):
+        colon_positions = (sequences == colon_id).nonzero(as_tuple=True)[1]
+        batch_indices = torch.arange(sequences.size(0), device=sequences.device)
+        last_colons = torch.searchsorted(colon_positions, batch_indices[1:], right=True) - 1
+        distances = sequences.size(1) - colon_positions[last_colons]
+        return distances.to(dtype=torch.long)
 
-    # Calculate answer lengths once
-    answer_lengths = [
-        len(tokenizer.encode(item["answer_text"], add_special_tokens=False))
-        for item in batch
-    ]
-
-    # For both answer and teacher sequences, semicolon is at: answer_length + 2 (1 for eos, 1 for semicolon) from the end of the sequence
-    semicolon_pos = [length + 2 for length in answer_lengths]
+    answer_semicolon_pos = get_last_colon_pos(answer_input_ids, colon_token_id)
+    teacher_semicolon_pos = get_last_colon_pos(teacher_full_input_ids, colon_token_id)
 
     return {
         "question_input_ids": question_input_ids,
@@ -143,12 +148,8 @@ def collate_fn(batch, tokenizer, max_seq_length):
         "teacher_full_input_ids": teacher_full_input_ids,
         "teacher_full_attention_mask": teacher_full_attention_mask,
         "teacher_full_loss_mask": teacher_full_loss_mask,
-        "semicolon_position_from_end_answer": torch.tensor(
-            semicolon_pos, dtype=torch.long
-        ),
-        "semicolon_position_from_end_teacher_full": torch.tensor(
-            semicolon_pos, dtype=torch.long
-        ),
+        "semicolon_position_from_end_answer": answer_semicolon_pos,
+        "semicolon_position_from_end_teacher_full": teacher_semicolon_pos,
         "answer_text": [item["answer_text"] for item in batch],
     }
 
