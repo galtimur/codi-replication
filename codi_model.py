@@ -183,7 +183,6 @@ class CODIModel(nn.Module):
 
         question_ids = batch["question_input_ids"].to("cuda")
         answer_ids = batch["answer_input_ids"].to("cuda")
-        answer_ids[answer_ids == self.tokenizer.pad_token_id] = -100
         q_attn_mask = batch["question_attention_mask"].to("cuda")
         a_attn_mask = batch["answer_attention_mask"].to("cuda")
         question_embeds = self.llm.get_input_embeddings()(question_ids)
@@ -193,9 +192,11 @@ class CODIModel(nn.Module):
             question_embeds, q_attn_mask
         )
         attn_msk_q_cot_a = torch.cat([attn_msk_q_cot, a_attn_mask], dim=1)
+        labels = answer_ids.clone()
+        labels[labels == self.tokenizer.pad_token_id] = -100
         answer_result = self.llm(
             inputs_embeds=answer_embed,
-            labels=answer_ids,
+            labels=labels,
             past_key_values=past_key_values,
             attention_mask=attn_msk_q_cot_a,
             output_hidden_states=True,
