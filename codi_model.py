@@ -138,19 +138,22 @@ class CODIModel(nn.Module):
         del last_output_vectors, student_outputs, quest_embeds
         return past_key_values
 
-    def forward(self, inputs: dict[str, torch.Tensor]):
-        question_ids = inputs["question_ids"].to("cuda")
-        answer_ids = inputs["answer_ids"].to("cuda")
+    def forward(self, batch: dict[str, torch.Tensor]):
+
+        '''
+        Takes question and answer embeddings and runs the chain-of-thought reasoning.
+        '''
+
+        question_ids = batch["question_input_ids"].to("cuda")
+        answer_ids = batch["answer_input_ids"].to("cuda")
         question_embeds = self.llm.get_input_embeddings()(question_ids)
         answer_embed = self.llm.get_input_embeddings()(answer_ids)
 
         past_key_values = self.run_cot_loop(question_embeds)
         answer_result = self.llm(
-            inputs_embeds=answer_embed,
-            past_key_values=past_key_values,
-            labels=answer_ids,  
+            inputs_embeds=answer_embed, labels=answer_ids, past_key_values=past_key_values
         )
-        answer_result["num_tokens"] = torch.sum(answer_ids != -100)
+        answer_result["num_tokens"] = torch.sum(batch["teacher_full_attention_mask"])
 
         return answer_result
 
