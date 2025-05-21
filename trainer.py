@@ -3,7 +3,7 @@ File is taken from kotlin-initiative repo
 """
 
 import math
-import os
+import re
 import time
 import traceback
 import warnings
@@ -21,6 +21,13 @@ from tqdm import tqdm
 from transformers import BatchEncoding, get_cosine_schedule_with_warmup
 
 import wandb
+
+def extract_number(pred_answer):
+    # This pattern matches integers or floating point numbers
+    match = re.match(r'^[-+]?(\d+(\.\d*)?|\.\d+)', pred_answer)
+    if match:
+        return match.group(0)
+    return pred_answer
 
 
 def scale_grads(model: nn.Module, scaler: torch.Tensor) -> None:
@@ -269,6 +276,8 @@ class PytorchTrainer:
             for i, batch in enumerate(val_dataloader):
                 # GT: batch["answer_text"]
                 # Pred: decoded_text
+                # with open("test_results.txt", "a") as f:
+                #     f.write(70*"-")
 
                 self.batch_to_device(batch)
 
@@ -283,12 +292,15 @@ class PytorchTrainer:
                     self.model.tokenizer.decode(outputs.logits[j].argmax(dim=-1), skip_special_tokens=True)
                     for j in range(len(batch["answer_text"]))
                 ]
-                
+
                 for decoded_text, true_answer in zip(decoded_texts, batch["answer_text"]):
                     pred_answer = decoded_text.split(":")[-1].strip().lower()
+                    pred_answer = extract_number(pred_answer)
                     true_answer = true_answer.strip().lower()
                     if pred_answer == true_answer:
                         match_count += 1
+                    # with open("test_results.txt", "a") as f:
+                    #     f.write(f"{pred_answer}|  ---  |{true_answer}\n")
                     total_count += 1
 
                 # Log just the first sample text from first batch
