@@ -22,7 +22,7 @@ class BaseModel(nn.Module):
             self.config = config
         self.model_name = self.config.model_name_or_path
         self.max_length = self.config.max_length
-        self.device = "cuda"
+        self.device = self.config.device
 
         self.init_tokenizer_and_model()
 
@@ -93,7 +93,7 @@ class CODIModel(nn.Module):
                 dtype=torch.bfloat16,
             ),
             nn.LayerNorm(self.llm.config.hidden_size, dtype=torch.bfloat16),
-        ).to("cuda")
+        ).to(self.device)
 
     def get_eot_vector(self):
         eot_token_id = self.tokenizer.convert_tokens_to_ids(self.config.eot_token)
