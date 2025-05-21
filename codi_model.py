@@ -123,21 +123,27 @@ class CODIModel(nn.Module):
         self.eot_embedding = embedding_layer.weight[eot_token_id]
 
     def run_cot_loop(
-        self, quest_embeds: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+        self, quest_embeds: torch.Tensor, q_attn_mask: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         past_key_values = None
+        current_attention_mask = q_attn_mask
         for i in range(self.cot_length):
             # No causal masking, as the model is already causal
             student_outputs = self.llm(
                 inputs_embeds=quest_embeds,
                 output_hidden_states=True,
                 past_key_values=past_key_values,
+                atttention_mask=current_attention_mask,
             )
             last_output_vectors = self.proj(
                 student_outputs.hidden_states[-1][:, -1].unsqueeze(dim=1)
             )
             quest_embeds = last_output_vectors
             past_key_values = student_outputs.past_key_values
+            new_token_mask = torch.ones(
+                current_attention_mask.size(0), 1,
+                device=current_attention_mask.device
+            )
+            current_attention_mask = torch.cat([current_attention_mask, new_token_mask], dim=1)
 
         del last_output_vectors, student_outputs, quest_embeds
         return past_key_values
@@ -165,17 +171,18 @@ class CODIModel(nn.Module):
             )
         return distill_loss
 
-    def forward(self, batch: dict[str, torch.Tensor]):
+    def forward_student(self, batch: dict[str, torch.Tensor]):
         """
         Takes question and answer embeddings and runs the chain-of-thought reasoning.
         """
 
         question_ids = batch["question_input_ids"].to("cuda")
         answer_ids = batch["answer_input_ids"].to("cuda")
+        q_attn_mask = batch["question_attention_mask"].to("cuda")
         question_embeds = self.llm.get_input_embeddings()(question_ids)
         answer_embed = self.llm.get_input_embeddings()(answer_ids)
 
-        past_key_values = self.run_cot_loop(question_embeds)
+        past_key_values = self.run_cot_loop(question_embeds, q_attn_mask)
         answer_result = self.llm(
             inputs_embeds=answer_embed,
             labels=answer_ids,
@@ -186,7 +193,7 @@ class CODIModel(nn.Module):
 
         return answer_result
 
-    def forward_with_teacher(self, batch: dict[str, torch.Tensor]):
+    def forward(self, batch: dict[str, torch.Tensor]):
         input_ids = batch["teacher_full_input_ids"]
         attention_mask = batch["teacher_full_attention_mask"]
         teacher_outputs = self.llm.forward(
@@ -195,7 +202,7 @@ class CODIModel(nn.Module):
             labels=input_ids,
             output_hidden_states=True,
         )
-        student_outputs = self.forward(batch)
+        student_outputs = self.forward_student(batch)
 
         distill_loss = self.calc_distil_loss(batch, teacher_outputs, student_outputs)
         total_loss = (
@@ -210,6 +217,7 @@ class CODIModel(nn.Module):
             "teacher_loss": teacher_outputs.loss,
             "student_loss": student_outputs.loss,
             "distill_loss": distill_loss,
+            "logits": student_outputs.logits,
         }
 
     def generate(
