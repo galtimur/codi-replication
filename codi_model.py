@@ -161,10 +161,9 @@ class CODIModel(nn.Module):
     ):
         semicolon_pos = batch["semicolon_position_from_end_answer"]
         batch_indices = torch.arange(student_outputs.logits.size(0), device=self.device)
-        actual_positions_stud = student_outputs.logits.size(1) - 1 - semicolon_pos
-        actual_positions_teach = teacher_outputs.logits.size(1) - 1 - semicolon_pos
+        actual_positions_stud = student_outputs.logits.size(1) - semicolon_pos
+        actual_positions_teach = teacher_outputs.logits.size(1) - semicolon_pos
         distill_loss = torch.Tensor([0.0]).to(self.device)
-
         for layer_stud, layer_teach in zip(
             student_outputs.hidden_states, teacher_outputs.hidden_states
         ):
