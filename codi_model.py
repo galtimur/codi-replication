@@ -42,13 +42,15 @@ class BaseModel(nn.Module):
     def forward(self, batch, *args, **kwargs):
         input_ids = batch["teacher_full_input_ids"]
         attention_mask = batch["teacher_full_attention_mask"]
-        return self.llm.forward(
+        outputs = self.llm.forward(
             input_ids=input_ids,
             attention_mask=attention_mask,
             labels=input_ids,
             *args,
             **kwargs
         )
+        outputs["num_tokens"] = torch.sum(attention_mask)
+        return outputs
 
     def generate(self, *args, **kwargs):
         return self.llm.generate(*args, **kwargs)
@@ -144,8 +146,11 @@ class CODIModel(nn.Module):
 
         past_key_values = self.run_cot_loop(question_embeds)
         answer_result = self.llm(
-            inputs_embeds=answer_embed, past_key_values=past_key_values
+            inputs_embeds=answer_embed,
+            past_key_values=past_key_values,
+            labels=answer_ids,  
         )
+        answer_result["num_tokens"] = torch.sum(answer_ids != -100)
 
         return answer_result
 
