@@ -28,9 +28,10 @@ def setup_seed(seed=0xDEADC0DE, cudnn_benchmark=True):
 
 def train(config: DictConfig) -> None:
     wandb.login(key=os.environ["WANDB_KEY"], host=os.environ["WANDB_HOST"])
+    model_name = config.model.model_name_or_path.split("/")[0]
     wandb.init(
         project="codi",
-        name=config.model.model_type+"-"+os.environ["WANDB_NAME"],
+        name=config.model.model_type+"-"+model_name+"-"+os.environ["WANDB_NAME"],
         # mode="disabled",
     )
     config_dict = OmegaConf.to_container(config, resolve=True)
