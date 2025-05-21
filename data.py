@@ -128,7 +128,7 @@ def collate_fn(batch, tokenizer, max_seq_length):
     for i in range(batch_size):
         padding_end = teacher_full_loss_mask[i].nonzero()[0].item()
         mask_end = padding_end + question_lengths[i] - 3
-        teacher_full_loss_mask[i, padding_end:mask_end] = 0
+        teacher_full_loss_mask[i, padding_end:mask_end-1] = 0
     
     # Get the token ID for ":"
     colon_token_id = tokenizer.encode(":")[0]
