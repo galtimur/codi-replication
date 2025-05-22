@@ -424,7 +424,7 @@ class PytorchTrainer:
         self.loss_tot += loss
         if self.model_type == "codi":
             self.loss_teach += forward_out.teacher_loss
-            self.loss_stud += forward_out.teacher_loss
+            self.loss_stud += forward_out.student_loss
             self.loss_distil += forward_out.distill_loss
         self.num_tokens += forward_out.num_tokens
 
