@@ -287,24 +287,37 @@ class PytorchTrainer:
                 val_loss_acc += outputs.loss
                 val_num_tokens += outputs.num_tokens
 
-                # Calculate exact match for every sample in batch
-                decoded_texts = [
-                    self.model.tokenizer.decode(outputs.logits[j][:-1].argmax(dim=-1), skip_special_tokens=True)
-                    for j in range(len(batch["answer_text"]))
-                ]
+                input_ids = batch["teacher_full_input_ids"]
+                loss_mask = batch["teacher_full_loss_mask"]
 
+                # Calculate exact match for every sample in batch
+                decoded_texts = []
+                for j in range(len(batch["answer_text"])):
+                    logits = outputs.logits[j]
+                    # Only keep predictions where loss_mask is 1
+                    masked_input_ids = (logits[loss_mask[j] == 1]).argmax(dim=-1)
+                    decoded_text = self.model.tokenizer.decode(masked_input_ids, skip_special_tokens=True)[:-1]
+                    decoded_texts.append(decoded_text)
                 for decoded_text, true_answer in zip(decoded_texts, batch["answer_text"]):
                     pred_answer = decoded_text.split(":")[-1].strip().lower()
                     pred_answer = extract_number(pred_answer)
                     true_answer = true_answer.strip().lower()
                     if pred_answer == true_answer:
                         match_count += 1
-                    # with open("test_results.txt", "a") as f:
-                    #     f.write(f"{pred_answer}|  ---  |{true_answer}\n")
                     total_count += 1
 
                 # Log just the first sample text from first batch
                 if i == 0 and self.is_main_process:
+                    # Get only the tokens where loss_mask is 1 for the first example
+                    masked_input = input_ids[0][loss_mask[0] == 1]
+                    decoded_input = self.model.tokenizer.decode(masked_input, skip_special_tokens=True)
+                    
+                    with open("test_results.txt", "a") as f:
+                        print(f"decoded input 0 (masked): {decoded_input}", file=f) 
+                        print(f"decoded_texts 0: {decoded_texts[0]}", file=f)
+                        print(f"batch['answer_text'] 0: {batch['answer_text'][0]}", file=f)
+                        print('pred-true is ---', pred_answer, "---", true_answer, "---", pred_answer == true_answer, file=f)
+                        print(70*"-" + "\n", file=f)
                     text_to_log = f"Validation Sample:\n{decoded_texts[0]}"
                     text_sample_table = wandb.Table(columns=["Generated Text"], data=[[text_to_log]])
                     wandb.log({
@@ -411,7 +424,7 @@ class PytorchTrainer:
         self.loss_tot += loss
         if self.model_type == "codi":
             self.loss_teach += forward_out.teacher_loss
-            self.loss_stud += forward_out.student_loss
+            self.loss_stud += forward_out.teacher_loss
             self.loss_distil += forward_out.distill_loss
         self.num_tokens += forward_out.num_tokens
 
