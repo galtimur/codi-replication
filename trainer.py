@@ -295,7 +295,12 @@ class PytorchTrainer:
                 for j in range(len(batch["answer_text"])):
                     logits = outputs.logits[j]
                     # Only keep predictions where loss_mask is 1
-                    masked_input_ids = (logits[loss_mask[j] == 1]).argmax(dim=-1)
+                    if self.model_type == "base":
+                        masked_input_ids = (logits[loss_mask[j] == 1]).argmax(dim=-1)
+                    elif self.model_type == "codi":
+                        masked_input_ids = logits.argmax(dim=-1)
+                    else:
+                        raise NotImplementedError
                     decoded_text = self.model.tokenizer.decode(masked_input_ids, skip_special_tokens=True)[:-1]
                     decoded_texts.append(decoded_text)
                 for decoded_text, true_answer in zip(decoded_texts, batch["answer_text"]):
