@@ -13,6 +13,7 @@ from omegaconf import DictConfig, OmegaConf
 
 import wandb
 from codi_model import BaseModel, CODIModel
+from codi_model_freeze import CODIModelFreeze
 from data import get_dataloader
 from trainer import PytorchTrainer
 
@@ -46,6 +47,8 @@ def train(config: DictConfig) -> None:
         model = BaseModel(config=config)
     elif config.model.model_type == "codi":
         model = CODIModel(config=config)
+    elif config.model.model_type == "codi_freeze":
+        model = CODIModelFreeze(config=config)
     else:
         raise ValueError("Invalid model type")
     print("Training {config.model.model_type} model")

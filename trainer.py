@@ -319,6 +319,8 @@ class PytorchTrainer:
                         masked_input_ids = (logits[loss_mask[j] == 1]).argmax(dim=-1)
                     elif self.model_type == "codi":
                         masked_input_ids = logits.argmax(dim=-1)
+                    elif self.model_type == "codi_freeze":
+                        masked_input_ids = logits.argmax(dim=-1)
                     else:
                         raise NotImplementedError
                     decoded_text = self.model.tokenizer.decode(masked_input_ids, skip_special_tokens=True)[:-1]
