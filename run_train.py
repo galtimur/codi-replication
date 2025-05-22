@@ -38,6 +38,8 @@ def train(config: DictConfig) -> None:
     wandb.config.update(config_dict)
     setup_seed()
 
+    config.train.save_checkpoints_dir = config.train.save_checkpoints_dir + f"/{wandb.run.id}"
+
     # Initialize dataloader and model
     train_dataloader, val_dataloaders = get_dataloader(config)
     if config.model.model_type == "base":
