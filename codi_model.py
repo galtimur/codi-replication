@@ -39,31 +39,6 @@ class BaseModel(nn.Module):
             self.llm = get_peft_model(self.llm, lora_config)
         self.llm = self.llm.to(self.device)
 
-    def load_from_checkpoint(self, checkpoint_path: str | Path):
-        """
-        Load model weights from a checkpoint file.
-
-        Args:
-            checkpoint_path: Path to the checkpoint file (.pt, .bin, or directory)
-        """
-        try:
-            if self.config.use_lora:
-                self.llm.load_adapter(checkpoint_path, adapter_name="default")
-                print(f"Loaded LoRA weights from {checkpoint_path}")
-            else:
-                checkpoint = torch.load(checkpoint_path, map_location=self.device)
-                if "model_state_dict" in checkpoint:
-                    self.llm.load_state_dict(checkpoint["model_state_dict"])
-                elif "state_dict" in checkpoint:
-                    self.llm.load_state_dict(checkpoint["state_dict"])
-                else:
-                    self.llm.load_state_dict(checkpoint)
-
-                print(f"Successfully loaded model weights from {checkpoint_path}")
-        except Exception as e:
-            print(f"Error loading checkpoint from {checkpoint_path}: {str(e)}")
-            raise
-
     def forward(self, batch, *args, **kwargs):
         input_ids = batch["teacher_full_input_ids"]
         attention_mask = batch["teacher_full_attention_mask"]
@@ -123,7 +98,14 @@ class CODIModel(nn.Module):
         )
         self.llm.resize_token_embeddings(len(self.tokenizer), mean_resizing=True)
         if self.config.use_lora:
-            lora_config = LoraConfig(**self.config.lora)
+            tgt_modules = OmegaConf.to_container(self.config.lora.target_modules, resolve=True)
+            lora_config = LoraConfig(
+                r=self.config.lora.r,
+                lora_alpha=self.config.lora.lora_alpha,
+                target_modules=tgt_modules,
+                lora_dropout=self.config.lora.lora_dropout,
+                bias=self.config.lora.bias,
+            )
             self.llm = get_peft_model(self.llm, lora_config)
         self.llm = self.llm.to(self.device)
 

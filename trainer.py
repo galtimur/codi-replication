@@ -169,17 +169,16 @@ class PytorchTrainer:
             if batches_done % self.config.save_checkpoints_every == 0:
                 time_start = time.time()
 
-                checkpoint_dir = Path(self.config.save_checkpoints_dir)
+                # Create checkpoint directory with batches_done in path
+                checkpoint_dir = Path(self.config.save_checkpoints_dir) / str(batches_done)
                 checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
-                checkpoint_path = checkpoint_dir / f"checkpoint_{batches_done}.pt"
+                # Check if using LoRA from model config
+                is_lora = hasattr(self.model, 'config') and self.model.config.use_lora
 
                 checkpoint_dict = {
-                    "model_state_dict": self.model.state_dict(),
                     "optimizer_state_dict": self.optimizer.state_dict(),
-                    "scheduler_state_dict": self.scheduler.state_dict()
-                    if self.scheduler
-                    else None,
+                    "scheduler_state_dict": self.scheduler.state_dict() if self.scheduler else None,
                     "batches_done": batches_done,
                     "micro_batches_done": self.micro_batches_done,
                     "total_tokens": self.total_tokens,
@@ -187,13 +186,36 @@ class PytorchTrainer:
                     "total_training_time": self.total_training_time,
                 }
 
-                torch.save(checkpoint_dict, checkpoint_path)
+                if is_lora:
+                    # Save LoRA adapter weights in the batches_done subdirectory
+                    self.model.llm.save_pretrained(checkpoint_dir)
+                else:
+                    # Save full model state dict for non-LoRA models
+                    checkpoint_dict["model_state_dict"] = self.model.state_dict()
+
+                # Save training state in the batches_done subdirectory
+                torch.save(checkpoint_dict, checkpoint_dir / "training_state.pt")
                 print(f"Checkpoint saved in {time.time() - time_start} s.")
 
     def load_checkpoint(self, checkpoint_path: str):
-        checkpoint = torch.load(checkpoint_path, map_location=self._device)
+        checkpoint_path = Path(checkpoint_path)
+        checkpoint = torch.load(checkpoint_path / "training_state.pt", map_location=self._device)
 
-        self.model.load_state_dict(checkpoint["model_state_dict"])
+        # Check if using LoRA from model config
+        is_lora = hasattr(self.model, 'config') and self.model.config.use_lora
+
+        if is_lora:
+            # Load LoRA adapter weights from the specific checkpoint directory
+            self.model.llm.load_adapter(
+                checkpoint_path,
+                adapter_name="default"
+            )
+            print(f"Loaded LoRA weights from {checkpoint_path}")
+        else:
+            # Load full model state dict
+            self.model.load_state_dict(checkpoint["model_state_dict"])
+            print(f"Loaded full model weights from {checkpoint_path}")
+
         self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         if self.scheduler and checkpoint["scheduler_state_dict"]:
             self.scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
@@ -276,8 +298,6 @@ class PytorchTrainer:
             for i, batch in enumerate(val_dataloader):
                 # GT: batch["answer_text"]
                 # Pred: decoded_text
-                # with open("test_results.txt", "a") as f:
-                #     f.write(70*"-")
 
                 self.batch_to_device(batch)
 

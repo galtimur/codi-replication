@@ -38,7 +38,7 @@ def train(config: DictConfig) -> None:
     wandb.config.update(config_dict)
     setup_seed()
 
-    config.train.save_checkpoints_dir = config.train.save_checkpoints_dir + f"/{wandb.run.id}"
+    config.train.save_checkpoints_dir = config.train.save_checkpoints_dir + f"/{os.environ['WANDB_NAME']}"
 
     # Initialize dataloader and model
     train_dataloader, val_dataloaders = get_dataloader(config)
