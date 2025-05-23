@@ -23,7 +23,9 @@ class CODIModelFreeze(CODIModel):
             self.model_name, torch_dtype=torch.bfloat16
         )
         if checkpoint_path is not None:
-            state_dict = torch.load(checkpoint_path, map_location="cpu")["model_state_dict"]
+            state_dict = torch.load(checkpoint_path, map_location="cpu")[
+                "model_state_dict"
+            ]
             dict_keys = list(state_dict.keys())
             for key in dict_keys:
                 if key.startswith("llm."):
@@ -35,7 +37,6 @@ class CODIModelFreeze(CODIModel):
         # Freeze all parameters of the teacher model
         for param in self.llm_teacher.parameters():
             param.requires_grad = False
-
 
     def forward(self, batch: dict[str, torch.Tensor]):
         input_ids = batch["teacher_full_input_ids"]
@@ -61,7 +62,7 @@ class CODIModelFreeze(CODIModel):
             past_key_values=None,
             hidden_states=None,
             attentions=None,
-            cross_attentions=None
+            cross_attentions=None,
         )
         output.num_tokens = student_outputs["num_tokens"]
         output.teacher_loss = teacher_outputs.loss

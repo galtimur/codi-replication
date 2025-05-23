@@ -98,7 +98,9 @@ class CODIModel(nn.Module):
         )
         self.llm.resize_token_embeddings(len(self.tokenizer), mean_resizing=True)
         if self.config.use_lora:
-            tgt_modules = OmegaConf.to_container(self.config.lora.target_modules, resolve=True)
+            tgt_modules = OmegaConf.to_container(
+                self.config.lora.target_modules, resolve=True
+            )
             lora_config = LoraConfig(
                 r=self.config.lora.r,
                 lora_alpha=self.config.lora.lora_alpha,
@@ -239,7 +241,7 @@ class CODIModel(nn.Module):
             past_key_values=None,
             hidden_states=None,
             attentions=None,
-            cross_attentions=None
+            cross_attentions=None,
         )
         output.num_tokens = student_outputs["num_tokens"]
         output.teacher_loss = teacher_outputs.loss

@@ -32,14 +32,20 @@ def train(config: DictConfig) -> None:
     model_name = config.model.model_name_or_path.split("/")[0]
     wandb.init(
         project="codi",
-        name=config.model.model_type+"-"+model_name+"-"+os.environ["WANDB_NAME"],
+        name=config.model.model_type
+        + "-"
+        + model_name
+        + "-"
+        + os.environ["WANDB_NAME"],
         # mode="disabled",
     )
     config_dict = OmegaConf.to_container(config, resolve=True)
     wandb.config.update(config_dict)
     setup_seed()
 
-    config.train.save_checkpoints_dir = config.train.save_checkpoints_dir + f"/{os.environ['WANDB_NAME']}"
+    config.train.save_checkpoints_dir = (
+        config.train.save_checkpoints_dir + f"/{os.environ['WANDB_NAME']}"
+    )
 
     # Initialize dataloader and model
     train_dataloader, val_dataloaders = get_dataloader(config)

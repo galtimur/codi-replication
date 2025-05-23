@@ -22,9 +22,10 @@ from transformers import BatchEncoding, get_cosine_schedule_with_warmup
 
 import wandb
 
+
 def extract_number(pred_answer):
     # This pattern matches integers or floating point numbers
-    match = re.match(r'^[-+]?(\d+(\.\d*)?|\.\d+)', pred_answer)
+    match = re.match(r"^[-+]?(\d+(\.\d*)?|\.\d+)", pred_answer)
     if match:
         return match.group(0)
     return pred_answer
@@ -170,15 +171,19 @@ class PytorchTrainer:
                 time_start = time.time()
 
                 # Create checkpoint directory with batches_done in path
-                checkpoint_dir = Path(self.config.save_checkpoints_dir) / str(batches_done)
+                checkpoint_dir = Path(self.config.save_checkpoints_dir) / str(
+                    batches_done
+                )
                 checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
                 # Check if using LoRA from model config
-                is_lora = hasattr(self.model, 'config') and self.model.config.use_lora
+                is_lora = hasattr(self.model, "config") and self.model.config.use_lora
 
                 checkpoint_dict = {
                     "optimizer_state_dict": self.optimizer.state_dict(),
-                    "scheduler_state_dict": self.scheduler.state_dict() if self.scheduler else None,
+                    "scheduler_state_dict": self.scheduler.state_dict()
+                    if self.scheduler
+                    else None,
                     "batches_done": batches_done,
                     "micro_batches_done": self.micro_batches_done,
                     "total_tokens": self.total_tokens,
@@ -199,17 +204,16 @@ class PytorchTrainer:
 
     def load_checkpoint(self, checkpoint_path: str):
         checkpoint_path = Path(checkpoint_path)
-        checkpoint = torch.load(checkpoint_path / "training_state.pt", map_location=self._device)
+        checkpoint = torch.load(
+            checkpoint_path / "training_state.pt", map_location=self._device
+        )
 
         # Check if using LoRA from model config
-        is_lora = hasattr(self.model, 'config') and self.model.config.use_lora
+        is_lora = hasattr(self.model, "config") and self.model.config.use_lora
 
         if is_lora:
             # Load LoRA adapter weights from the specific checkpoint directory
-            self.model.llm.load_adapter(
-                checkpoint_path,
-                adapter_name="default"
-            )
+            self.model.llm.load_adapter(checkpoint_path, adapter_name="default")
             print(f"Loaded LoRA weights from {checkpoint_path}")
         else:
             # Load full model state dict
@@ -323,9 +327,13 @@ class PytorchTrainer:
                         masked_input_ids = logits.argmax(dim=-1)
                     else:
                         raise NotImplementedError
-                    decoded_text = self.model.tokenizer.decode(masked_input_ids, skip_special_tokens=True)[:-1]
+                    decoded_text = self.model.tokenizer.decode(
+                        masked_input_ids, skip_special_tokens=True
+                    )[:-1]
                     decoded_texts.append(decoded_text)
-                for decoded_text, true_answer in zip(decoded_texts, batch["answer_text"]):
+                for decoded_text, true_answer in zip(
+                    decoded_texts, batch["answer_text"]
+                ):
                     pred_answer = decoded_text.split(":")[-1].strip().lower()
                     pred_answer = extract_number(pred_answer)
                     true_answer = true_answer.strip().lower()
@@ -337,20 +345,34 @@ class PytorchTrainer:
                 if i == 0 and self.is_main_process:
                     # Get only the tokens where loss_mask is 1 for the first example
                     masked_input = input_ids[0][loss_mask[0] == 1]
-                    decoded_input = self.model.tokenizer.decode(masked_input, skip_special_tokens=True)
-                    
-                    with open("test_results.txt", "a") as f:
-                        print(f"decoded input 0 (masked): {decoded_input}", file=f) 
-                        print(f"decoded_texts 0: {decoded_texts[0]}", file=f)
-                        print(f"batch['answer_text'] 0: {batch['answer_text'][0]}", file=f)
-                        print('pred-true is ---', pred_answer, "---", true_answer, "---", pred_answer == true_answer, file=f)
-                        print(70*"-" + "\n", file=f)
-                    text_to_log = f"Validation Sample:\n{decoded_texts[0]}"
-                    text_sample_table = wandb.Table(columns=["Generated Text"], data=[[text_to_log]])
-                    wandb.log({
-                        "val/generated_text_sample": text_sample_table
-                    }, step=self.batches_done)
+                    decoded_input = self.model.tokenizer.decode(
+                        masked_input, skip_special_tokens=True
+                    )
 
+                    with open("test_results.txt", "a") as f:
+                        print(f"decoded input 0 (masked): {decoded_input}", file=f)
+                        print(f"decoded_texts 0: {decoded_texts[0]}", file=f)
+                        print(
+                            f"batch['answer_text'] 0: {batch['answer_text'][0]}", file=f
+                        )
+                        print(
+                            "pred-true is ---",
+                            pred_answer,
+                            "---",
+                            true_answer,
+                            "---",
+                            pred_answer == true_answer,
+                            file=f,
+                        )
+                        print(70 * "-" + "\n", file=f)
+                    text_to_log = f"Validation Sample:\n{decoded_texts[0]}"
+                    text_sample_table = wandb.Table(
+                        columns=["Generated Text"], data=[[text_to_log]]
+                    )
+                    wandb.log(
+                        {"val/generated_text_sample": text_sample_table},
+                        step=self.batches_done,
+                    )
 
             val_loss_mean = val_loss_acc
             exact_match_rate = match_count / total_count if total_count > 0 else 0.0
